@@ -784,7 +784,7 @@ export default function InvoiceModule() {
       {viewState === 'view' && selectedInvoice && (
         <div className="space-y-6">
           {/* View Mode controls bar */}
-          <div className="flex justify-between items-center pb-4 border-b border-slate-900/10 dark:border-slate-800/40">
+          <div className="flex justify-between items-center pb-4 border-b border-slate-900/10 dark:border-slate-800/40 print:hidden">
             <div className="flex items-center gap-3">
               <button
                 id="btn-back-to-invoices"
@@ -839,6 +839,16 @@ export default function InvoiceModule() {
               )}
 
               <button
+                id="btn-export-pdf"
+                onClick={() => window.print()}
+                className="p-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold flex items-center gap-1 shadow-sm transition-all"
+                title="Exportar como PDF de alta fidelidade"
+              >
+                <Download className="h-4 w-4" />
+                <span>Exportar PDF</span>
+              </button>
+
+              <button
                 id="btn-print-invoice"
                 onClick={() => window.print()}
                 className={`p-1.5 px-3 rounded-lg border text-[11px] font-semibold flex items-center gap-1 ${
@@ -851,10 +861,10 @@ export default function InvoiceModule() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 print:block">
             
             {/* Printable Visual Invoice Document */}
-            <div id="printable-invoice-canvas" className={`lg:col-span-3 p-8 rounded-xl shadow-lg border relative ${
+            <div id="printable-invoice-canvas" className={`lg:col-span-3 p-8 rounded-xl shadow-lg border relative print:w-full print:p-0 print:border-none print:shadow-none print:text-black print:bg-white ${
               theme === 'dark' ? 'bg-white text-slate-900 border-slate-300 shadow-slate-950/20' : 'bg-white text-slate-900 border-slate-200'
             }`}>
               
@@ -1032,7 +1042,7 @@ export default function InvoiceModule() {
             </div>
 
             {/* Quick Operational Timeline card */}
-            <div className={`col-span-1 p-5 rounded-xl border ${
+            <div className={`col-span-1 p-5 rounded-xl border print:hidden ${
               theme === 'dark' ? 'bg-slate-950 border-slate-900 text-slate-300' : 'bg-white border-slate-200 text-slate-750'
             } space-y-4`}>
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Auditoria Fiscal e Historial</h3>

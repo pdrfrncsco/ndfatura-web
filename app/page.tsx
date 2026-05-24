@@ -163,7 +163,7 @@ function ApplicationShell() {
         </main>
 
         {/* Status Bar / Footer (Clean Minimalism) */}
-        <footer className={`h-10 shrink-0 border-t px-6 md:px-8 flex items-center justify-between text-[10px] font-medium transition-colors ${
+        <footer className={`h-10 shrink-0 border-t px-6 md:px-8 flex items-center justify-between text-[10px] font-medium transition-colors print:hidden ${
           theme === 'dark' 
             ? 'bg-slate-950 border-slate-900 text-slate-400' 
             : 'bg-white border-slate-200 text-slate-500'

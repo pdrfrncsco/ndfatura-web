@@ -70,7 +70,7 @@ export default function Topbar() {
     : 'hover:bg-slate-50';
 
   return (
-    <header className={`h-16 w-full px-6 flex items-center justify-between sticky top-0 z-20 ${topbarBg}`}>
+    <header className={`h-16 w-full px-6 flex items-center justify-between sticky top-0 z-20 print:hidden ${topbarBg}`}>
       {/* 1. Left Side: Active Tenant Selector dropdown */}
       <div className="flex items-center gap-4">
         <div className="relative">

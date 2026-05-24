@@ -1,1 +1,42 @@
 @import "tailwindcss";
+
+@media print {
+  @page {
+    margin: 1.2cm !important;
+    size: auto;
+  }
+  body {
+    background-color: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Hide non-printable app components during print */
+  aside, 
+  header, 
+  footer, 
+  nav,
+  button,
+  .print\:hidden {
+    display: none !important;
+  }
+  
+  /* Reset layout constraints representing screen widgets */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Force print target container to take full width */
+  #printable-invoice-canvas {
+    width: 100% !important;
+    max-width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
+

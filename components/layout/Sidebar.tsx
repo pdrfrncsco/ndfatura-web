@@ -54,7 +54,7 @@ export default function Sidebar({ onSearchFocus }: SidebarProps) {
   return (
     <aside 
       id="ndf-sidebar" 
-      className={`h-screen flex flex-col transition-all duration-300 select-none ${
+      className={`h-screen flex flex-col transition-all duration-300 select-none print:hidden ${
         sidebarCollapsed ? 'w-16' : 'w-64'
       } ${sidebarBg} relative z-30`}
     >
