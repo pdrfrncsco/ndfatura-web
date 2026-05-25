@@ -3,6 +3,7 @@
 import * as React from 'react';
 import QueryProvider from '../providers/queryProvider';
 import { useAuthStore } from '../stores/authStore';
+import { useDataStore } from '../stores/dataStore';
 import Sidebar from '../components/layout/Sidebar';
 import Topbar from '../components/layout/Topbar';
 import DashboardView from '../components/dashboard/DashboardView';
@@ -16,17 +17,38 @@ import SettingsModule from '../components/settings/SettingsModule';
 import { Building, Lock, Mail, ChevronRight, CheckCircle } from 'lucide-react';
 
 function ApplicationShell() {
-  const { currentScreen, isAuthenticated, login, theme } = useAuthStore();
+  const { currentScreen, isAuthenticated, login, bootstrapSession, currentTenant, theme } = useAuthStore();
+  const { loadTenantData, isLoadingRemoteData, remoteDataError } = useDataStore();
   
   // Auth Form State inside SPA Shell
   const [email, setEmail] = React.useState('ndeasdigital@gmail.com');
-  const [password, setPassword] = React.useState('••••••••••••');
+  const [password, setPassword] = React.useState('admin12345');
   const [role, setRole] = React.useState('Admin');
+  const [loginError, setLoginError] = React.useState('');
+  const [isLoggingIn, setIsLoggingIn] = React.useState(false);
+
+  React.useEffect(() => {
+    bootstrapSession();
+  }, [bootstrapSession]);
+
+  React.useEffect(() => {
+    if (isAuthenticated && currentTenant) {
+      loadTenantData(currentTenant.id);
+    }
+  }, [currentTenant, isAuthenticated, loadTenantData]);
 
   // Trigger login
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(email, role);
+    setLoginError('');
+    setIsLoggingIn(true);
+    try {
+      await login(email, password);
+    } catch {
+      setLoginError('Credenciais inválidas ou API indisponível.');
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   const mainBg = theme === 'dark' 
@@ -118,11 +140,18 @@ function ApplicationShell() {
               <button
                 id="btn-login-submit"
                 type="submit"
+                disabled={isLoggingIn}
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center justify-center gap-1 transition-transform"
               >
-                <span>Aceder ao Sistema</span>
+                <span>{isLoggingIn ? 'A validar credenciais...' : 'Aceder ao Sistema'}</span>
                 <ChevronRight className="h-4 w-4" />
               </button>
+
+              {loginError && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-semibold text-red-300">
+                  {loginError}
+                </div>
+              )}
 
             </form>
           </div>
@@ -152,6 +181,16 @@ function ApplicationShell() {
 
         {/* Dynamic Canvas Area */}
         <main className={`flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 space-y-6 ${mainBg}`}>
+          {remoteDataError && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs font-semibold text-amber-500">
+              {remoteDataError}
+            </div>
+          )}
+          {isLoadingRemoteData && (
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-xs font-semibold text-blue-500">
+              A sincronizar dados com a API...
+            </div>
+          )}
           {currentScreen === 'dashboard' && <DashboardView />}
           {currentScreen === 'invoices' && <InvoiceModule />}
           {currentScreen === 'clients' && <ClientsModule />}

@@ -1,11 +1,18 @@
 import { create } from 'zustand';
 import { Client, Product, Invoice, AuditLog, DashboardStats, InvoiceItem } from '../types/invoice';
+import { AuditService, ClientService, DashboardService, InvoiceService, ProductService } from '../services/api';
 
 interface DataState {
   clients: Client[];
   products: Product[];
   invoices: Invoice[];
   auditLogs: AuditLog[];
+  dashboardStatsByTenant: Record<string, DashboardStats>;
+  isLoadingRemoteData: boolean;
+  remoteDataError: string | null;
+
+  // Remote sync
+  loadTenantData: (tenantId: string) => Promise<void>;
   
   // Actions for Clients
   addClient: (client: Omit<Client, 'id'>) => Client;
@@ -307,6 +314,45 @@ export const useDataStore = create<DataState>((set, get) => ({
   products: getStorageItem('ndf_products', SEED_PRODUCTS),
   invoices: getStorageItem('ndf_invoices', SEED_INVOICES),
   auditLogs: getStorageItem('ndf_audit_logs', SEED_AUDIT_LOGS),
+  dashboardStatsByTenant: {},
+  isLoadingRemoteData: false,
+  remoteDataError: null,
+
+  loadTenantData: async (tenantId) => {
+    set({ isLoadingRemoteData: true, remoteDataError: null });
+    try {
+      const [clients, products, invoices, auditLogs, dashboardStats] = await Promise.all([
+        ClientService.getAll(),
+        ProductService.getAll(),
+        InvoiceService.getAll(),
+        AuditService.getAll(),
+        DashboardService.getStats()
+      ]);
+
+      set((state) => ({
+        clients,
+        products,
+        invoices: invoices.length > 0 ? invoices : state.invoices.filter((i) => i.tenantId === tenantId),
+        auditLogs,
+        dashboardStatsByTenant: {
+          ...state.dashboardStatsByTenant,
+          [tenantId]: dashboardStats
+        },
+        isLoadingRemoteData: false,
+        remoteDataError: null
+      }));
+
+      setStorageItem('ndf_clients', clients);
+      setStorageItem('ndf_products', products);
+      setStorageItem('ndf_invoices', invoices.length > 0 ? invoices : get().invoices);
+      setStorageItem('ndf_audit_logs', auditLogs);
+    } catch (error) {
+      set({
+        isLoadingRemoteData: false,
+        remoteDataError: error instanceof Error ? error.message : 'Falha ao sincronizar dados com a API.'
+      });
+    }
+  },
 
   addClient: (clientData) => {
     const newClient: Client = {
@@ -325,6 +371,14 @@ export const useDataStore = create<DataState>((set, get) => ({
       ipAddress: '127.0.0.1',
       tenantId: clientData.tenantId
     });
+    ClientService.create(clientData)
+      .then((serverClient) => {
+        const synced = get().clients.map((client) => (client.id === newClient.id ? serverClient : client));
+        set({ clients: synced });
+        setStorageItem('ndf_clients', synced);
+        return get().loadTenantData(serverClient.tenantId);
+      })
+      .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao criar cliente na API.' }));
     return newClient;
   },
 
@@ -341,6 +395,13 @@ export const useDataStore = create<DataState>((set, get) => ({
       ipAddress: '127.0.0.1',
       tenantId: updated.find(c => c.id === id)?.tenantId || 'ten-001'
     });
+    ClientService.update(id, updatedFields)
+      .then((serverClient) => {
+        const synced = get().clients.map((client) => (client.id === id ? serverClient : client));
+        set({ clients: synced });
+        setStorageItem('ndf_clients', synced);
+      })
+      .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao actualizar cliente na API.' }));
   },
 
   deleteClient: (id) => {
@@ -358,6 +419,9 @@ export const useDataStore = create<DataState>((set, get) => ({
         ipAddress: '127.0.0.1',
         tenantId: target.tenantId
       });
+      ClientService.delete(id)
+        .then(() => get().loadTenantData(target.tenantId))
+        .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao remover cliente na API.' }));
     }
   },
 
@@ -378,6 +442,14 @@ export const useDataStore = create<DataState>((set, get) => ({
       ipAddress: '127.0.0.1',
       tenantId: productData.tenantId
     });
+    ProductService.create(productData)
+      .then((serverProduct) => {
+        const synced = get().products.map((product) => (product.id === newProduct.id ? serverProduct : product));
+        set({ products: synced });
+        setStorageItem('ndf_products', synced);
+        return get().loadTenantData(serverProduct.tenantId);
+      })
+      .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao criar produto na API.' }));
     return newProduct;
   },
 
@@ -394,6 +466,13 @@ export const useDataStore = create<DataState>((set, get) => ({
       ipAddress: '127.0.0.1',
       tenantId: updated.find(p => p.id === id)?.tenantId || 'ten-001'
     });
+    ProductService.update(id, updatedFields)
+      .then((serverProduct) => {
+        const synced = get().products.map((product) => (product.id === id ? serverProduct : product));
+        set({ products: synced });
+        setStorageItem('ndf_products', synced);
+      })
+      .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao actualizar produto na API.' }));
   },
 
   deleteProduct: (id) => {
@@ -411,6 +490,9 @@ export const useDataStore = create<DataState>((set, get) => ({
         ipAddress: '127.0.0.1',
         tenantId: target.tenantId
       });
+      ProductService.delete(id)
+        .then(() => get().loadTenantData(target.tenantId))
+        .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao remover produto na API.' }));
     }
   },
 
@@ -531,6 +613,9 @@ export const useDataStore = create<DataState>((set, get) => ({
   },
 
   getDashboardStats: (tenantId) => {
+    const remoteStats = get().dashboardStatsByTenant[tenantId];
+    if (remoteStats) return remoteStats;
+
     const state = get();
     const tenantInvoices = state.invoices.filter((i) => i.tenantId === tenantId);
     

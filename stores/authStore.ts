@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { User, Tenant } from '../types/invoice';
+import { AuthService, hasAccessToken, setActiveTenantHeaders } from '../services/api';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -12,7 +13,8 @@ interface AuthState {
   notifications: Array<{ id: string; title: string; desc: string; time: string; read: boolean; type: 'success' | 'warning' | 'info' }>;
   
   // Actions
-  login: (email: string, role: string) => void;
+  login: (email: string, password: string) => Promise<void>;
+  bootstrapSession: () => Promise<void>;
   logout: () => void;
   switchTenant: (tenantId: string) => void;
   updateTenantProfile: (updated: Partial<Tenant>) => void;
@@ -24,55 +26,11 @@ interface AuthState {
   addNotification: (noti: { title: string; desc: string; type: 'success' | 'warning' | 'info' }) => void;
 }
 
-const MOCK_USER: User = {
-  id: 'usr-928',
-  name: 'Eng. Manuel Bento',
-  email: 'ndeasdigital@gmail.com',
-  role: 'Admin',
-  avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=120' // Real high quality headshot via unsplash
-};
-
-const MOCK_TENANTS: Tenant[] = [
-  {
-    id: 'ten-001',
-    name: 'Sodiam Exportações Lda',
-    nif: '540398271',
-    address: 'Av. Lenine, Edifício Torres Atlântico, Piso 7',
-    city: 'Luanda',
-    country: 'Angola',
-    fiscalRegime: 'Regime Geral (Transmissões de Bens e Serviços)',
-    logoUrl: '',
-    agtCertificateNo: '241/AGT/2026'
-  },
-  {
-    id: 'ten-002',
-    name: 'Sonangol Distribuição S.A.',
-    nif: '540101928',
-    address: 'Rua Rainha Ginga, n.º 29-31',
-    city: 'Luanda',
-    country: 'Angola',
-    fiscalRegime: 'Regime Geral',
-    logoUrl: '',
-    agtCertificateNo: '242/AGT/2026'
-  },
-  {
-    id: 'ten-003',
-    name: 'Startup Luanda Tech Lda',
-    nif: '920817342',
-    address: 'Estrada de Catete, Km 12, Luanda Centro',
-    city: 'Luanda',
-    country: 'Angola',
-    fiscalRegime: 'Regime Simplificado (Art. 22-A do IVA)',
-    logoUrl: '',
-    agtCertificateNo: '243/AGT/2026'
-  }
-];
-
 export const useAuthStore = create<AuthState>((set) => ({
-  isAuthenticated: true, // We default to true to allow immediate interactive exploration of the system
-  user: MOCK_USER,
-  currentTenant: MOCK_TENANTS[0],
-  tenants: MOCK_TENANTS,
+  isAuthenticated: false,
+  user: null,
+  currentTenant: null,
+  tenants: [],
   theme: 'dark', // Let's set dark as default for that sleek fintech look, fully togglable!
   currentScreen: 'dashboard',
   sidebarCollapsed: false,
@@ -103,24 +61,45 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   ],
 
-  login: (email: string, role: string) => {
+  login: async (email: string, password: string) => {
+    const session = await AuthService.login(email, password);
+    const currentTenant = session.tenants[0] || null;
+    setActiveTenantHeaders(currentTenant);
     set({
       isAuthenticated: true,
-      user: {
-        id: 'usr-custom',
-        name: email.split('@')[0].replace('.', ' '),
-        email: email,
-        role: role as any,
-        avatar: undefined
-      }
+      user: session.user,
+      tenants: session.tenants,
+      currentTenant
     });
   },
 
-  logout: () => set({ isAuthenticated: false, user: null }),
+  bootstrapSession: async () => {
+    if (!hasAccessToken()) return;
+    try {
+      const session = await AuthService.me();
+      const currentTenant = session.tenants[0] || null;
+      setActiveTenantHeaders(currentTenant);
+      set({
+        isAuthenticated: true,
+        user: session.user,
+        tenants: session.tenants,
+        currentTenant
+      });
+    } catch {
+      AuthService.logout();
+      set({ isAuthenticated: false, user: null, tenants: [], currentTenant: null });
+    }
+  },
+
+  logout: () => {
+    AuthService.logout();
+    set({ isAuthenticated: false, user: null, tenants: [], currentTenant: null });
+  },
 
   switchTenant: (tenantId: string) => {
     set((state) => {
       const selected = state.tenants.find((t) => t.id === tenantId) || state.currentTenant;
+      setActiveTenantHeaders(selected);
       return { currentTenant: selected };
     });
   },

@@ -1,5 +1,5 @@
 {
-  "name": "NDFATURA",
+  "name": "FACTURYAN",
   "description": "SaaS ERP Billing and Electronic Invoicing platform ready for AGT in Angola.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
