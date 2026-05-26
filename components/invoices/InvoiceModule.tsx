@@ -51,7 +51,7 @@ function generateFaturaDates(invoiceType: string) {
 
 export default function InvoiceModule() {
   const { currentTenant, theme, user, addNotification } = useAuthStore();
-  const { clients, products, invoices, addInvoice, updateInvoiceStatus, syncInvoiceWithAGT } = useDataStore();
+  const { clients, products, invoices, addInvoice, issueInvoice } = useDataStore();
 
   const [viewState, setViewState] = React.useState<'list' | 'create' | 'view'>('list');
   const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null);
@@ -71,6 +71,7 @@ export default function InvoiceModule() {
   const [withholdingEnabled, setWithholdingEnabled] = React.useState(false);
   const [notes, setNotes] = React.useState('');
   const [isSavingDraft, setIsSavingDraft] = React.useState(false);
+  const [isIssuing, setIsIssuing] = React.useState(false);
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
   const [invoiceItems, setInvoiceItems] = React.useState<Array<{
     productId: string;
@@ -825,39 +826,55 @@ export default function InvoiceModule() {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Sync with AGT trigger option */}
-              {selectedInvoice.status !== 'AGT_Synced' && selectedInvoice.status !== 'Paid' && (
+              {selectedInvoice.status === 'Draft' && (
                 <button
-                  id="btn-sync-now-agt"
-                  onClick={() => {
-                    syncInvoiceWithAGT(selectedInvoice.id);
-                    // Update layout
-                    const up = useDataStore.getState().invoices.find(i => i.id === selectedInvoice.id);
-                    if (up) setSelectedInvoice(up);
-                    addNotification({
-                      title: 'Sincronizado via Webservice',
-                      desc: `Incomodidade AGT solucionada com sucesso para factura ${selectedInvoice.invoiceNo}`,
-                      type: 'success'
-                    });
+                  id="btn-issue-invoice"
+                  disabled={isIssuing}
+                  onClick={async () => {
+                    setIsIssuing(true);
+                    try {
+                      const issued = await issueInvoice(selectedInvoice.id);
+                      setSelectedInvoice(issued);
+                      addNotification({
+                        title: 'Factura emitida',
+                        desc: `Documento ${issued.invoiceNo} emitido com assinatura fiscal.`,
+                        type: 'success'
+                      });
+                    } catch (error) {
+                      addNotification({
+                        title: 'Emissão bloqueada',
+                        desc: error instanceof Error ? error.message : 'Não foi possível emitir a factura.',
+                        type: 'warning'
+                      });
+                    } finally {
+                      setIsIssuing(false);
+                    }
                   }}
                   className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg shadow-sm"
                 >
-                  Sincronizar Oficial AGT
+                  {isIssuing ? 'A emitir...' : 'Emitir Fiscalmente'}
                 </button>
               )}
 
-              {/* Set as liquid option */}
-              {selectedInvoice.status !== 'Paid' && selectedInvoice.status !== 'Cancelled' && (
+              {selectedInvoice.status === 'Issued' && (
+                <button
+                  id="btn-sync-now-agt-disabled"
+                  disabled
+                  className="px-3.5 py-1.5 bg-slate-500/40 text-white/70 text-[11px] font-bold rounded-lg shadow-sm cursor-not-allowed"
+                  title="A sincronização AGT será implementada com Celery na próxima fase."
+                >
+                  AGT Sync Pendente
+                </button>
+              )}
+
+              {selectedInvoice.status !== 'Paid' && selectedInvoice.status !== 'Cancelled' && selectedInvoice.status !== 'Draft' && (
                 <button
                   id="btn-mark-as-paid"
-                  onClick={() => {
-                    updateInvoiceStatus(selectedInvoice.id, 'Paid');
-                    const up = useDataStore.getState().invoices.find(i => i.id === selectedInvoice.id);
-                    if (up) setSelectedInvoice(up);
-                  }}
+                  disabled
                   className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold ${
                     theme === 'dark' ? 'bg-slate-900 border-slate-800 text-emerald-400 hover:bg-slate-800' : 'bg-slate-100 border-slate-205 text-emerald-700 hover:bg-slate-200'
                   }`}
+                  title="A liquidação será implementada no módulo de pagamentos."
                 >
                   Liquidar (FR / VD)
                 </button>

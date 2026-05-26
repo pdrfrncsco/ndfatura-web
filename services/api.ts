@@ -350,6 +350,11 @@ export const InvoiceService = {
     await apiClient.delete(`/facturas/${id}/`);
   },
 
+  issue: async (id: string): Promise<Invoice> => {
+    const response = await apiClient.post<ApiEnvelope<Invoice>>(`/facturas/${id}/emitir/`);
+    return normalizeInvoice(unwrap(response));
+  },
+
   updateStatus: async (): Promise<never> => {
     throw new Error('A alteração de estado fiscal será activada no milestone fiscal.');
   },
