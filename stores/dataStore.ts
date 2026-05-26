@@ -25,7 +25,7 @@ interface DataState {
   deleteProduct: (id: string) => Promise<void>;
   
   // Actions for Invoices
-  addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceHash' | 'qrcodeString'>) => Invoice;
+  addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceHash' | 'qrcodeString'>) => Promise<Invoice>;
   updateInvoiceStatus: (id: string, status: Invoice['status']) => void;
   syncInvoiceWithAGT: (id: string) => void;
   addAuditLog: (log: Omit<AuditLog, 'id' | 'timestamp'>) => void;
@@ -446,48 +446,19 @@ export const useDataStore = create<DataState>((set, get) => ({
     }
   },
 
-  addInvoice: (invoiceData) => {
-    const tenantInvoices = get().invoices.filter((i) => i.tenantId === invoiceData.tenantId);
-    const count = tenantInvoices.length + 1;
-    const padCount = String(count).padStart(3, '0');
-    
-    // Generate Invoice number
-    const year = new Date().getFullYear();
-    const invoiceNo = `${invoiceData.type} ${year}/${padCount}`;
-    
-    // Generate AGT Compliant Cryptographic Simulation Hash
-    // Base64-like random 32 char key
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-';
-    let invoiceHash = '';
-    for (let i = 0; i < 30; i++) {
-      invoiceHash += chars.charAt(Math.floor(Math.random() * chars.length));
+  addInvoice: async (invoiceData) => {
+    set({ remoteDataError: null });
+    try {
+      const newInvoice = await InvoiceService.create(invoiceData);
+      const updated = [newInvoice, ...get().invoices.filter((invoice) => invoice.id !== newInvoice.id)];
+      set({ invoices: updated });
+      setStorageItem('ndf_invoices', updated);
+      await get().loadTenantData(newInvoice.tenantId);
+      return newInvoice;
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao criar rascunho de factura na API.' });
+      throw error;
     }
-    
-    const qrcodeString = `https://portaldocontribuinte.minfin.gov.ao/verify?hash=${invoiceHash}&nif=${invoiceData.clientNif}`;
-
-    const newInvoice: Invoice = {
-      ...invoiceData,
-      id: `inv-${Date.now()}`,
-      invoiceNo,
-      invoiceHash: invoiceData.status === 'Draft' ? '' : invoiceHash,
-      qrcodeString: invoiceData.status === 'Draft' ? '' : qrcodeString,
-      agtSyncDate: invoiceData.status === 'AGT_Synced' ? new Date().toISOString().replace('T', ' ').substring(0, 19) : undefined,
-    };
-
-    const updated = [...get().invoices, newInvoice];
-    set({ invoices: updated });
-    setStorageItem('ndf_invoices', updated);
-
-    get().addAuditLog({
-      userId: 'usr-928',
-      userName: 'Eng. Manuel Bento',
-      action: 'CREATE_INVOICE',
-      details: `Factura ${newInvoice.invoiceNo} emitida para ${newInvoice.clientName} no valor de ${newInvoice.grandTotal.toLocaleString('pt-PT')} AOA (Status: ${newInvoice.status})`,
-      ipAddress: '127.0.0.1',
-      tenantId: invoiceData.tenantId
-    });
-
-    return newInvoice;
   },
 
   updateInvoiceStatus: (id, status) => {

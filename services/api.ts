@@ -202,6 +202,26 @@ const normalizeProduct = (product: Product): Product => ({
   taxRate: toNumber(product.taxRate)
 });
 
+const normalizeInvoice = (invoice: Invoice): Invoice => ({
+  ...invoice,
+  subtotal: toNumber(invoice.subtotal),
+  discountTotal: toNumber(invoice.discountTotal),
+  taxTotal: toNumber(invoice.taxTotal),
+  withholdingTaxRate: toNumber(invoice.withholdingTaxRate),
+  withholdingTaxAmount: toNumber(invoice.withholdingTaxAmount),
+  grandTotal: toNumber(invoice.grandTotal),
+  items: invoice.items.map((item) => ({
+    ...item,
+    quantity: toNumber(item.quantity),
+    price: toNumber(item.price),
+    taxRate: toNumber(item.taxRate),
+    discount: toNumber(item.discount),
+    totalTax: toNumber(item.totalTax),
+    subtotal: toNumber(item.subtotal),
+    total: toNumber(item.total)
+  }))
+});
+
 const normalizeDashboardStats = (stats: DashboardStats): DashboardStats => ({
   ...stats,
   totalInvoiced: toNumber(stats.totalInvoiced),
@@ -284,16 +304,50 @@ export const ProductService = {
 export const InvoiceService = {
   getAll: async (): Promise<Invoice[]> => {
     const response = await apiClient.get<ApiEnvelope<Paginated<Invoice>>>('/facturas/');
-    return listFromResponse(response);
+    return listFromResponse(response).map(normalizeInvoice);
   },
 
   getById: async (id: string): Promise<Invoice> => {
     const response = await apiClient.get<ApiEnvelope<Invoice>>(`/facturas/${id}/`);
-    return unwrap(response);
+    return normalizeInvoice(unwrap(response));
   },
 
-  create: async (): Promise<never> => {
-    throw new Error('A emissão de facturas será activada no milestone fiscal.');
+  create: async (invoiceData: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceHash' | 'qrcodeString'>): Promise<Invoice> => {
+    const response = await apiClient.post<ApiEnvelope<Invoice>>('/facturas/', {
+      type: invoiceData.type,
+      clientId: invoiceData.clientId,
+      dueDate: invoiceData.dueDate,
+      withholdingTaxRate: invoiceData.withholdingTaxRate,
+      notes: invoiceData.notes || '',
+      items: invoiceData.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: item.price,
+        discount: item.discount
+      }))
+    });
+    return normalizeInvoice(unwrap(response));
+  },
+
+  update: async (id: string, invoiceData: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceHash' | 'qrcodeString'>): Promise<Invoice> => {
+    const response = await apiClient.put<ApiEnvelope<Invoice>>(`/facturas/${id}/`, {
+      type: invoiceData.type,
+      clientId: invoiceData.clientId,
+      dueDate: invoiceData.dueDate,
+      withholdingTaxRate: invoiceData.withholdingTaxRate,
+      notes: invoiceData.notes || '',
+      items: invoiceData.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: item.price,
+        discount: item.discount
+      }))
+    });
+    return normalizeInvoice(unwrap(response));
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await apiClient.delete(`/facturas/${id}/`);
   },
 
   updateStatus: async (): Promise<never> => {

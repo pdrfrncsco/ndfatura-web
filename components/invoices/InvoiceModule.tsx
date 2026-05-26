@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
+import { getApiFieldErrors } from '../../services/api';
 import { Client, Product, Invoice, InvoiceItem, InvoiceType, InvoiceStatus } from '../../types/invoice';
 import { 
   FileText, 
@@ -69,6 +70,8 @@ export default function InvoiceModule() {
   const [invoiceStatus, setInvoiceStatus] = React.useState<'Draft' | 'Issued' | 'AGT_Synced'>('Draft');
   const [withholdingEnabled, setWithholdingEnabled] = React.useState(false);
   const [notes, setNotes] = React.useState('');
+  const [isSavingDraft, setIsSavingDraft] = React.useState(false);
+  const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
   const [invoiceItems, setInvoiceItems] = React.useState<Array<{
     productId: string;
     quantity: number;
@@ -181,10 +184,11 @@ export default function InvoiceModule() {
     setInvoiceItems(updated);
   };
 
-  const handeSubmitInvoice = (e: React.FormEvent) => {
+  const handeSubmitInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormErrors({});
     if (!selectedClientId) {
-       alert('Alerta: Seleccione um cliente para facturar.');
+       setFormErrors({ clientId: 'Seleccione um cliente para facturar.' });
        return;
     }
     const client = tenantClients.find(c => c.id === selectedClientId);
@@ -193,43 +197,55 @@ export default function InvoiceModule() {
     // Validate lines
     const validLines = calculatedItems.filter(item => item.productId !== '');
     if (validLines.length === 0) {
-      alert('Alerta: Adicione pelo menos um produto com código válido.');
+      setFormErrors({ items: 'Adicione pelo menos um produto com codigo valido.' });
       return;
     }
 
     const { todayStr, dueDateStr } = generateFaturaDates(invoiceType);
 
-    const result = addInvoice({
-      type: invoiceType,
-      status: invoiceStatus,
-      issueDate: todayStr,
-      dueDate: dueDateStr, // cash receipts pay immediately
-      clientId: client.id,
-      clientName: client.name,
-      clientNif: client.nif,
-      clientAddress: `${client.address}, ${client.city}`,
-      items: validLines,
-      subtotal: liveSubtotal,
-      discountTotal: liveDiscountTotal,
-      taxTotal: liveTaxTotal,
-      withholdingTaxRate: withholdingEnabled ? 6.5 : 0,
-      withholdingTaxAmount: liveWithholding,
-      grandTotal: liveGrandTotal,
-      notes: notes || (withholdingEnabled ? 'Documento sujeito a Retenção na Fonte de 6.5% de IRT.' : undefined),
-      tenantId: currentTenant.id,
-      createdBy: user?.name || 'Equipa NDFATURA'
-    });
+    setIsSavingDraft(true);
+    try {
+      const result = await addInvoice({
+        type: invoiceType,
+        status: 'Draft',
+        issueDate: todayStr,
+        dueDate: dueDateStr,
+        clientId: client.id,
+        clientName: client.name,
+        clientNif: client.nif,
+        clientAddress: `${client.address}, ${client.city}`,
+        items: validLines,
+        subtotal: liveSubtotal,
+        discountTotal: liveDiscountTotal,
+        taxTotal: liveTaxTotal,
+        withholdingTaxRate: withholdingEnabled ? 6.5 : 0,
+        withholdingTaxAmount: liveWithholding,
+        grandTotal: liveGrandTotal,
+        notes: notes || (withholdingEnabled ? 'Documento sujeito a Retenção na Fonte de 6.5% de IRT.' : undefined),
+        tenantId: currentTenant.id,
+        createdBy: user?.name || 'Equipa NDFATURA'
+      });
 
-    addNotification({
-      title: `Factura ${invoiceStatus === 'AGT_Synced' ? 'Sincronizada' : 'Criada'}`,
-      desc: `A factura foi registada com sucesso no sistema.`,
-      type: invoiceStatus === 'AGT_Synced' ? 'success' : 'info'
-    });
+      addNotification({
+        title: 'Rascunho de factura criado',
+        desc: 'O rascunho foi calculado e registado pela API.',
+        type: 'info'
+      });
 
-    // Reset and redirect
-    resetForm();
-    setSelectedInvoice(result);
-    setViewState('view');
+      resetForm();
+      setSelectedInvoice(result);
+      setViewState('view');
+    } catch (error) {
+      const apiErrors = getApiFieldErrors(error);
+      if (Object.keys(apiErrors).length > 0) {
+        const firstError = Object.values(apiErrors)[0];
+        setFormErrors({ ...apiErrors, global: firstError });
+      } else {
+        setFormErrors({ global: error instanceof Error ? error.message : 'Falha ao criar rascunho.' });
+      }
+    } finally {
+      setIsSavingDraft(false);
+    }
   };
 
   // Status badges mapping
@@ -498,8 +514,8 @@ export default function InvoiceModule() {
                 <ArrowLeft className="h-4 w-4" />
               </button>
               <div>
-                <h1 className="text-lg font-bold">Emitir Fatura de Bens / Serviços</h1>
-                <p className="text-[11px] text-slate-500 mt-0.5">Calculadora fiscal sincronizada sob regras de validação AGT de Angola.</p>
+                <h1 className="text-lg font-bold">Criar Rascunho de Factura</h1>
+                <p className="text-[11px] text-slate-500 mt-0.5">O backend calcula totais, impostos e valida cliente/produtos antes da emissão fiscal.</p>
               </div>
             </div>
 
@@ -507,18 +523,19 @@ export default function InvoiceModule() {
               <button
                 id="btn-save-invoice-draft"
                 type="submit"
-                onClick={() => setInvoiceStatus('Draft')}
+                disabled={isSavingDraft}
                 className={`px-4 py-2 border rounded-lg text-xs font-semibold ${
                   theme === 'dark' ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-200' : 'bg-slate-100 hover:bg-slate-205 border-slate-200 text-slate-700'
                 }`}
               >
-                Gravar Rascunho
+                {isSavingDraft ? 'A gravar...' : 'Gravar Rascunho'}
               </button>
               <button
                 id="btn-issue-sync-invoice"
-                type="submit"
-                onClick={() => setInvoiceStatus('AGT_Synced')}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+                type="button"
+                disabled
+                className="px-4 py-2 bg-slate-500/40 text-white/70 text-xs font-semibold rounded-lg shadow-sm cursor-not-allowed"
+                title="A emissão fiscal será implementada depois do fluxo de rascunho."
               >
                 Emitir e Sincronizar AGT
               </button>
@@ -552,6 +569,7 @@ export default function InvoiceModule() {
                         <option key={c.id} value={c.id}>{c.name} (NIF: {c.nif})</option>
                       ))}
                     </select>
+                    {formErrors.clientId && <p className="text-[10px] text-red-500 font-mono mt-0.5">{formErrors.clientId}</p>}
                   </div>
 
                   {/* Document Type */}
@@ -687,6 +705,7 @@ export default function InvoiceModule() {
                     );
                   })}
                 </div>
+                {formErrors.items && <p className="text-[10px] text-red-500 font-mono mt-0.5">{formErrors.items}</p>}
               </div>
 
               {/* Notes block */}
@@ -761,6 +780,12 @@ export default function InvoiceModule() {
                   </div>
                 </div>
               </div>
+
+              {formErrors.global && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-semibold text-red-400">
+                  {formErrors.global}
+                </div>
+              )}
 
               {/* Compliance note card */}
               <div className={`p-4 rounded-xl border border-blue-500/15 ${
