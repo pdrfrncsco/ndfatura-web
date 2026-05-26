@@ -129,11 +129,11 @@ export default function Topbar() {
 
       {/* 2. Right Side Action Bars: Theme, Notifications, Profile */}
       <div className="flex items-center gap-3">
-        {/* AGT Conectado Pill */}
+        {/* AGT Conectado Pill 
         <div className="hidden sm:flex items-center px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 rounded-full text-[10px] font-bold tracking-tight uppercase text-emerald-700 dark:text-emerald-400 mr-1.5">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></div>
           <span>AGT Conectado</span>
-        </div>
+        </div> */}
 
         {/* Theme Toggle */}
         <button

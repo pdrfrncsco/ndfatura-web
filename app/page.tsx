@@ -68,13 +68,13 @@ function ApplicationShell() {
           {/* Logo center */}
           <div className="text-center space-y-2">
             <div className="h-12 w-12 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl mx-auto shadow-sm tracking-tighter">
-              ND
+              FA
             </div>
             <h1 className="text-xl font-bold font-sans tracking-tight text-white mt-4">
-              NDFATURA ERP
+              FACTURYAN
             </h1>
             <p className="text-slate-400 text-xs">
-              SaaS de Facturação Electrónica Certificada para Angola
+              SaaS de Facturação Electrónica Certificada pela AGT. <a href="https://ndeas.cloud" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 font-bold">by ND</a>
             </p>
           </div>
 

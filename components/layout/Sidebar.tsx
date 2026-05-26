@@ -33,7 +33,7 @@ export default function Sidebar({ onSearchFocus }: SidebarProps) {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'invoices', label: 'Facturação (AGT)', icon: FileText },
+    { id: 'invoices', label: 'Facturação', icon: FileText },
     { id: 'clients', label: 'Clientes', icon: Users },
     { id: 'products', label: 'Produtos e IVA', icon: Package },
     { id: 'reports', label: 'Relatórios & Mapas', icon: TrendingUp },
@@ -62,12 +62,12 @@ export default function Sidebar({ onSearchFocus }: SidebarProps) {
       <div className={`flex items-center justify-between h-16 border-b border-slate-750 bg-[#1E293B] ${sidebarCollapsed ? 'px-3.5' : 'px-6'}`}>
         <div className="flex items-center gap-3 overflow-hidden">
           <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shrink-0 shadow-sm font-sans font-bold text-base select-all">
-            ND
+            FA
           </div>
           {!sidebarCollapsed && (
             <div className="flex flex-col">
               <span className="font-sans font-bold text-base tracking-tight leading-none text-white">
-                NDFATURA
+                FACTURYAN
               </span>
               <span className="text-[9px] font-mono mt-0.5 tracking-wider text-slate-400">
                 ERP COMPLIANT

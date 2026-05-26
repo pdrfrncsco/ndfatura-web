@@ -90,7 +90,7 @@ export default function DashboardView() {
             Dashboard Executivo
           </h1>
           <p className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'} mt-0.5`}>
-            Visão geral da facturação AGT e KPIs corporativos para <strong className="font-semibold">{currentTenant.name}</strong>.
+            Visão geral da facturação e KPIs corporativos para <strong className="font-semibold">{currentTenant.name}</strong>.
           </p>
         </div>
         

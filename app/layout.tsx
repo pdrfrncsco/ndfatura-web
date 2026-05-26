@@ -2,7 +2,7 @@ import type {Metadata} from 'next';
 import './globals.css'; // Global styles
 
 export const metadata: Metadata = {
-  title: 'NDFATURA - SaaS ERP Facturação Certificada Angola',
+  title: 'FACTURYAN - SaaS ERP Facturação Certificada pela AGT',
   description: 'SaaS ERP Billing and Electronic Invoicing platform ready for AGT compliance in Angola.',
 };
 
