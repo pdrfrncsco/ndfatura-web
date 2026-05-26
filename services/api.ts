@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { AuditLog, Client, DashboardStats, Invoice, Product, Tenant, User } from '../types/invoice';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
@@ -31,6 +31,18 @@ type LoginResponse = {
   user: User;
   tenants: Tenant[];
 };
+
+export class ApiError extends Error {
+  errors: unknown;
+  status?: number;
+
+  constructor(message: string, errors: unknown, status?: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.errors = errors;
+    this.status = status;
+  }
+}
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -115,20 +127,57 @@ apiClient.interceptors.response.use(
         return apiClient(originalRequest);
       } catch (refreshError) {
         clearAuthTokens();
-        return Promise.reject(refreshError);
+        return Promise.reject(normalizeApiError(refreshError));
       }
     }
 
-    return Promise.reject(error);
+    return Promise.reject(normalizeApiError(error));
   }
 );
+
+function firstMessage(value: unknown): string {
+  if (Array.isArray(value)) return firstMessage(value[0]);
+  if (value && typeof value === 'object') {
+    const objectValue = value as Record<string, unknown>;
+    const firstKey = Object.keys(objectValue)[0];
+    return firstKey ? firstMessage(objectValue[firstKey]) : 'Erro de validação.';
+  }
+  if (typeof value === 'string') return value;
+  return 'Erro de validação.';
+}
+
+function normalizeApiError(error: unknown): Error {
+  if (axios.isAxiosError(error)) {
+    const axiosError = error as AxiosError<ApiEnvelope<unknown> | unknown>;
+    const payload = axiosError.response?.data;
+    if (payload && typeof payload === 'object' && 'success' in payload && 'errors' in payload) {
+      const envelope = payload as ApiEnvelope<unknown>;
+      return new ApiError(firstMessage(envelope.errors), envelope.errors, axiosError.response?.status);
+    }
+    return new ApiError(axiosError.message, payload, axiosError.response?.status);
+  }
+  return error instanceof Error ? error : new Error('Falha inesperada na API.');
+}
+
+export function getApiFieldErrors(error: unknown): Record<string, string> {
+  if (!(error instanceof ApiError) || !error.errors || typeof error.errors !== 'object') {
+    return {};
+  }
+
+  const payload = error.errors as Record<string, unknown>;
+  const fieldErrors: Record<string, string> = {};
+  Object.entries(payload).forEach(([field, value]) => {
+    fieldErrors[field] = firstMessage(value);
+  });
+  return fieldErrors;
+}
 
 function unwrap<T>(response: AxiosResponse<ApiEnvelope<T> | T>): T {
   const payload = response.data;
   if (payload && typeof payload === 'object' && 'success' in payload && 'data' in payload) {
     const envelope = payload as ApiEnvelope<T>;
     if (!envelope.success) {
-      throw envelope.errors || new Error('API request failed');
+      throw new ApiError(firstMessage(envelope.errors), envelope.errors);
     }
     return envelope.data;
   }

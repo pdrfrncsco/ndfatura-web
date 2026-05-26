@@ -3,6 +3,8 @@
 import * as React from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
+import { getApiFieldErrors } from '../../services/api';
+import { canDeleteCatalog, canWriteCatalog } from '../../lib/rbac';
 import { Product } from '../../types/invoice';
 import { 
   Package, 
@@ -60,8 +62,10 @@ export interface StockMovement {
 }
 
 export default function ProductsModule() {
-  const { currentTenant, theme, addNotification } = useAuthStore();
+  const { currentTenant, theme, user, addNotification } = useAuthStore();
   const { products, addProduct, updateProduct, deleteProduct } = useDataStore();
+  const canWriteProducts = canWriteCatalog(user?.role);
+  const canDeleteProducts = canDeleteCatalog(user?.role);
 
   // Navigation and extra views
   const [activeTab, setActiveTab] = React.useState<'catalog' | 'inventory'>('catalog');
@@ -138,6 +142,7 @@ export default function ProductsModule() {
   const [unit, setUnit] = React.useState('UN');
 
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = React.useState(false);
 
   const handleOpenAdjustmentModal = (p: Product) => {
     setAdjProduct(p);
@@ -170,7 +175,13 @@ export default function ProductsModule() {
     }
 
     // Call store update
-    updateProduct(adjProduct.id, { stock: newStock });
+    updateProduct(adjProduct.id, { stock: newStock }).catch((error) => {
+      addNotification({
+        title: 'Ajuste não sincronizado',
+        desc: error instanceof Error ? error.message : 'Falha ao actualizar stock na API.',
+        type: 'warning'
+      });
+    });
 
     // Append to stock movements trail
     const newMovement: StockMovement = {
@@ -272,7 +283,7 @@ export default function ProductsModule() {
     setModalOpen(true);
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormErrors({});
 
@@ -299,36 +310,48 @@ export default function ProductsModule() {
       return;
     }
 
-    if (isEditMode) {
-      updateProduct(editingId, formData);
-      addNotification({
-        title: 'Produto Actualizado',
-        desc: `O artigo ${name} foi modificado no catálogo fiscal.`,
-        type: 'success'
-      });
-    } else {
-      addProduct({
-        ...formData,
-        tenantId: currentTenant.id
-      });
-      addNotification({
-        title: 'Produto Adicionado',
-        desc: `Produto ${name} registado com as taxas IVA adequadas.`,
-        type: 'success'
-      });
+    setIsSaving(true);
+    try {
+      if (isEditMode) {
+        await updateProduct(editingId, formData);
+        addNotification({
+          title: 'Produto Actualizado',
+          desc: `O artigo ${name} foi modificado no catálogo fiscal.`,
+          type: 'success'
+        });
+      } else {
+        await addProduct({
+          ...formData,
+          tenantId: currentTenant.id
+        });
+        addNotification({
+          title: 'Produto Adicionado',
+          desc: `Produto ${name} registado com as taxas IVA adequadas.`,
+          type: 'success'
+        });
+      }
+      setModalOpen(false);
+    } catch (error) {
+      const apiErrors = getApiFieldErrors(error);
+      setFormErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { global: error instanceof Error ? error.message : 'Falha ao guardar produto.' });
+    } finally {
+      setIsSaving(false);
     }
-
-    setModalOpen(false);
   };
 
   const handleDeleteTrigger = (id: string, prodName: string) => {
     if (confirm(`Atenção: Tem a certeza que deseja remover o produto/serviço "${prodName}"? Linhas de faturamento que o utilizem não se perderão.`)) {
-      deleteProduct(id);
-      addNotification({
-        title: 'Produto Removido',
-        desc: `O artigo ${prodName} foi apagado do catálogo.`,
-        type: 'warning'
-      });
+      deleteProduct(id)
+        .then(() => addNotification({
+          title: 'Produto Removido',
+          desc: `O artigo ${prodName} foi apagado do catálogo.`,
+          type: 'warning'
+        }))
+        .catch((error) => addNotification({
+          title: 'Remoção bloqueada',
+          desc: error instanceof Error ? error.message : 'Não foi possível remover o produto.',
+          type: 'warning'
+        }));
     }
   };
 
@@ -348,11 +371,13 @@ export default function ProductsModule() {
         </div>
         
         {activeTab === 'catalog' && (
-          <button
-            id="btn-add-product-trigger"
-            onClick={handleOpenCreateModal}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm"
-          >
+        <button
+          id="btn-add-product-trigger"
+          onClick={handleOpenCreateModal}
+          disabled={!canWriteProducts}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+          title={!canWriteProducts ? 'Perfil sem permissão para registar produtos' : 'Novo Produto'}
+        >
             <Plus className="h-4.5 w-4.5" />
             <span>Novo Artigo</span>
           </button>
@@ -461,6 +486,7 @@ export default function ProductsModule() {
                         {p.code}
                       </span>
 
+                      {canWriteProducts && (
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute top-4 right-4">
                         <button
                           id={`btn-edit-product-${p.id}`}
@@ -473,12 +499,14 @@ export default function ProductsModule() {
                         <button
                           id={`btn-delete-product-${p.id}`}
                           onClick={() => handleDeleteTrigger(p.id, p.name)}
+                          disabled={!canDeleteProducts}
                           className="p-1.5 rounded bg-slate-100 dark:bg-slate-900 text-slate-400 hover:text-red-500 transition-colors"
                           title="Remover Artigo"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
+                      )}
                     </div>
 
                     <div className="mt-4">
@@ -746,6 +774,8 @@ export default function ProductsModule() {
                           <td className="px-5 py-3 text-center">
                             {isServ ? (
                               <span className="text-[10px] text-slate-500 italic">Isento de Ajustes</span>
+                            ) : !canWriteProducts ? (
+                              <span className="text-[10px] text-slate-500 italic">Sem permissão</span>
                             ) : (
                               <button
                                 id={`btn-adjust-stock-${p.id}`}
@@ -952,6 +982,11 @@ export default function ProductsModule() {
               </div>
 
               {/* Actions submit */}
+              {formErrors.global && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-semibold text-red-400">
+                  {formErrors.global}
+                </div>
+              )}
               <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-900/10 dark:border-slate-800/40">
                 <button
                   id="btn-dismiss-adjustment-modal"
@@ -1169,9 +1204,10 @@ export default function ProductsModule() {
                 <button
                   id="btn-confirm-product-save"
                   type="submit"
+                  disabled={isSaving}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm"
                 >
-                  Confirmar Guardar
+                  {isSaving ? 'A guardar...' : 'Confirmar Guardar'}
                 </button>
               </div>
 

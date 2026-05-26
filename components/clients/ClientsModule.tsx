@@ -3,6 +3,8 @@
 import * as React from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
+import { getApiFieldErrors } from '../../services/api';
+import { canDeleteCatalog, canWriteCatalog } from '../../lib/rbac';
 import { Client } from '../../types/invoice';
 import { 
   Users, 
@@ -33,8 +35,10 @@ const clientSchema = z.object({
 });
 
 export default function ClientsModule() {
-  const { currentTenant, theme, addNotification } = useAuthStore();
+  const { currentTenant, theme, user, addNotification } = useAuthStore();
   const { clients, addClient, updateClient, deleteClient } = useDataStore();
+  const canWriteClients = canWriteCatalog(user?.role);
+  const canDeleteClients = canDeleteCatalog(user?.role);
 
   const [searchTerm, setSearchTerm] = React.useState('');
   const [cityFilter, setCityFilter] = React.useState('ALL');
@@ -56,6 +60,7 @@ export default function ClientsModule() {
 
   // Error feedback state
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = React.useState(false);
 
   if (!currentTenant) return null;
 
@@ -106,7 +111,7 @@ export default function ClientsModule() {
     setModalOpen(true);
   };
 
-  const handleSaveClient = (e: React.FormEvent) => {
+  const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormErrors({});
 
@@ -125,36 +130,48 @@ export default function ClientsModule() {
       return;
     }
 
-    if (isEditMode) {
-      updateClient(editingId, formData);
-      addNotification({
-        title: 'Cliente Actualizado',
-        desc: `Os dados do cliente ${name} foram modificados com sucesso.`,
-        type: 'success'
-      });
-    } else {
-      addClient({
-        ...formData,
-        tenantId: currentTenant.id
-      });
-      addNotification({
-        title: 'Cliente Registado',
-        desc: `O cliente ${name} foi cadastrado com sucesso nas suas bases ERP.`,
-        type: 'success'
-      });
+    setIsSaving(true);
+    try {
+      if (isEditMode) {
+        await updateClient(editingId, formData);
+        addNotification({
+          title: 'Cliente Actualizado',
+          desc: `Os dados do cliente ${name} foram modificados com sucesso.`,
+          type: 'success'
+        });
+      } else {
+        await addClient({
+          ...formData,
+          tenantId: currentTenant.id
+        });
+        addNotification({
+          title: 'Cliente Registado',
+          desc: `O cliente ${name} foi cadastrado com sucesso nas suas bases ERP.`,
+          type: 'success'
+        });
+      }
+      setModalOpen(false);
+    } catch (error) {
+      const apiErrors = getApiFieldErrors(error);
+      setFormErrors(Object.keys(apiErrors).length > 0 ? apiErrors : { global: error instanceof Error ? error.message : 'Falha ao guardar cliente.' });
+    } finally {
+      setIsSaving(false);
     }
-
-    setModalOpen(false);
   };
 
   const handleDeleteTrigger = (id: string, clientName: string) => {
     if (confirm(`Atenção: Tem a certeza que deseja excluir permanentemente o cliente: ${clientName}? Todas as propostas em rasunho ficarão órfãs.`)) {
-      deleteClient(id);
-      addNotification({
-        title: 'Cliente Removido',
-        desc: `O cliente ${clientName} foi excluído da lista de faturamento.`,
-        type: 'warning'
-      });
+      deleteClient(id)
+        .then(() => addNotification({
+          title: 'Cliente Removido',
+          desc: `O cliente ${clientName} foi excluído da lista de faturamento.`,
+          type: 'warning'
+        }))
+        .catch((error) => addNotification({
+          title: 'Remoção bloqueada',
+          desc: error instanceof Error ? error.message : 'Não foi possível remover o cliente.',
+          type: 'warning'
+        }));
     }
   };
 
@@ -176,7 +193,9 @@ export default function ClientsModule() {
         <button
           id="btn-add-client-trigger"
           onClick={handleOpenCreateModal}
+          disabled={!canWriteClients}
           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+          title={!canWriteClients ? 'Perfil sem permissão para registar clientes' : 'Novo Cliente'}
         >
           <Plus className="h-4.5 w-4.5" />
           <span>Novo Cliente</span>
@@ -245,6 +264,7 @@ export default function ClientsModule() {
                   <Building className="h-4.5 w-4.5" />
                 </div>
                 
+                {canWriteClients && (
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute top-4 right-4">
                   <button
                     id={`btn-edit-client-${client.id}`}
@@ -257,12 +277,14 @@ export default function ClientsModule() {
                   <button
                     id={`btn-delete-client-${client.id}`}
                     onClick={() => handleDeleteTrigger(client.id, client.name)}
+                    disabled={!canDeleteClients}
                     className="p-1.5 rounded bg-slate-100 dark:bg-slate-900 text-slate-400 hover:text-red-500 transition-colors"
                     title="Remover Cliente"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
+                )}
               </div>
 
               {/* Client specifications */}
@@ -457,6 +479,11 @@ export default function ClientsModule() {
               </div>
 
               {/* Actions submit */}
+              {formErrors.global && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-semibold text-red-400">
+                  {formErrors.global}
+                </div>
+              )}
               <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-900/10 dark:border-slate-800/40">
                 <button
                   id="btn-dismiss-client-modal"
@@ -471,9 +498,10 @@ export default function ClientsModule() {
                 <button
                   id="btn-saving-client"
                   type="submit"
+                  disabled={isSaving}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm"
                 >
-                  Confirmar Guardar
+                  {isSaving ? 'A guardar...' : 'Confirmar Guardar'}
                 </button>
               </div>
 

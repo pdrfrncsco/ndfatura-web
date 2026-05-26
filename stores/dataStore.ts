@@ -15,14 +15,14 @@ interface DataState {
   loadTenantData: (tenantId: string) => Promise<void>;
   
   // Actions for Clients
-  addClient: (client: Omit<Client, 'id'>) => Client;
-  updateClient: (id: string, updated: Partial<Client>) => void;
-  deleteClient: (id: string) => void;
+  addClient: (client: Omit<Client, 'id'>) => Promise<Client>;
+  updateClient: (id: string, updated: Partial<Client>) => Promise<Client>;
+  deleteClient: (id: string) => Promise<void>;
   
   // Actions for Products
-  addProduct: (product: Omit<Product, 'id'>) => Product;
-  updateProduct: (id: string, updated: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
+  addProduct: (product: Omit<Product, 'id'>) => Promise<Product>;
+  updateProduct: (id: string, updated: Partial<Product>) => Promise<Product>;
+  deleteProduct: (id: string) => Promise<void>;
   
   // Actions for Invoices
   addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceHash' | 'qrcodeString'>) => Invoice;
@@ -354,145 +354,95 @@ export const useDataStore = create<DataState>((set, get) => ({
     }
   },
 
-  addClient: (clientData) => {
-    const newClient: Client = {
-      ...clientData,
-      id: `cli-${Date.now()}`
-    };
-    const updated = [...get().clients, newClient];
-    set({ clients: updated });
-    setStorageItem('ndf_clients', updated);
-    
-    get().addAuditLog({
-      userId: 'usr-928',
-      userName: 'Eng. Manuel Bento',
-      action: 'ADD_CLIENT',
-      details: `Cliente registado: ${newClient.name} (NIF: ${newClient.nif})`,
-      ipAddress: '127.0.0.1',
-      tenantId: clientData.tenantId
-    });
-    ClientService.create(clientData)
-      .then((serverClient) => {
-        const synced = get().clients.map((client) => (client.id === newClient.id ? serverClient : client));
-        set({ clients: synced });
-        setStorageItem('ndf_clients', synced);
-        return get().loadTenantData(serverClient.tenantId);
-      })
-      .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao criar cliente na API.' }));
-    return newClient;
-  },
-
-  updateClient: (id, updatedFields) => {
-    const updated = get().clients.map((c) => (c.id === id ? { ...c, ...updatedFields } : c));
-    set({ clients: updated });
-    setStorageItem('ndf_clients', updated);
-    
-    get().addAuditLog({
-      userId: 'usr-928',
-      userName: 'Eng. Manuel Bento',
-      action: 'UPDATE_CLIENT',
-      details: `Cliente ID ${id} actualizado.`,
-      ipAddress: '127.0.0.1',
-      tenantId: updated.find(c => c.id === id)?.tenantId || 'ten-001'
-    });
-    ClientService.update(id, updatedFields)
-      .then((serverClient) => {
-        const synced = get().clients.map((client) => (client.id === id ? serverClient : client));
-        set({ clients: synced });
-        setStorageItem('ndf_clients', synced);
-      })
-      .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao actualizar cliente na API.' }));
-  },
-
-  deleteClient: (id) => {
-    const target = get().clients.find(c => c.id === id);
-    const updated = get().clients.filter((c) => c.id !== id);
-    set({ clients: updated });
-    setStorageItem('ndf_clients', updated);
-    
-    if (target) {
-      get().addAuditLog({
-        userId: 'usr-928',
-        userName: 'Eng. Manuel Bento',
-        action: 'DELETE_CLIENT',
-        details: `Cliente removido: ${target.name}`,
-        ipAddress: '127.0.0.1',
-        tenantId: target.tenantId
-      });
-      ClientService.delete(id)
-        .then(() => get().loadTenantData(target.tenantId))
-        .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao remover cliente na API.' }));
+  addClient: async (clientData) => {
+    set({ remoteDataError: null });
+    try {
+      const newClient = await ClientService.create(clientData);
+      const updated = [...get().clients.filter((client) => client.id !== newClient.id), newClient];
+      set({ clients: updated });
+      setStorageItem('ndf_clients', updated);
+      await get().loadTenantData(newClient.tenantId);
+      return newClient;
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao criar cliente na API.' });
+      throw error;
     }
   },
 
-  addProduct: (productData) => {
-    const newProduct: Product = {
-      ...productData,
-      id: `prod-${Date.now()}`
-    };
-    const updated = [...get().products, newProduct];
-    set({ products: updated });
-    setStorageItem('ndf_products', updated);
-    
-    get().addAuditLog({
-      userId: 'usr-928',
-      userName: 'Eng. Manuel Bento',
-      action: 'ADD_PRODUCT',
-      details: `Produto adicionado: ${newProduct.name} (${newProduct.code})`,
-      ipAddress: '127.0.0.1',
-      tenantId: productData.tenantId
-    });
-    ProductService.create(productData)
-      .then((serverProduct) => {
-        const synced = get().products.map((product) => (product.id === newProduct.id ? serverProduct : product));
-        set({ products: synced });
-        setStorageItem('ndf_products', synced);
-        return get().loadTenantData(serverProduct.tenantId);
-      })
-      .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao criar produto na API.' }));
-    return newProduct;
+  updateClient: async (id, updatedFields) => {
+    set({ remoteDataError: null });
+    try {
+      const serverClient = await ClientService.update(id, updatedFields);
+      const updated = get().clients.map((client) => (client.id === id ? serverClient : client));
+      set({ clients: updated });
+      setStorageItem('ndf_clients', updated);
+      await get().loadTenantData(serverClient.tenantId);
+      return serverClient;
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao actualizar cliente na API.' });
+      throw error;
+    }
   },
 
-  updateProduct: (id, updatedFields) => {
-    const updated = get().products.map((p) => (p.id === id ? { ...p, ...updatedFields } : p));
-    set({ products: updated });
-    setStorageItem('ndf_products', updated);
-    
-    get().addAuditLog({
-      userId: 'usr-928',
-      userName: 'Eng. Manuel Bento',
-      action: 'UPDATE_PRODUCT',
-      details: `Produto ID ${id} actualizado.`,
-      ipAddress: '127.0.0.1',
-      tenantId: updated.find(p => p.id === id)?.tenantId || 'ten-001'
-    });
-    ProductService.update(id, updatedFields)
-      .then((serverProduct) => {
-        const synced = get().products.map((product) => (product.id === id ? serverProduct : product));
-        set({ products: synced });
-        setStorageItem('ndf_products', synced);
-      })
-      .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao actualizar produto na API.' }));
+  deleteClient: async (id) => {
+    const target = get().clients.find(c => c.id === id);
+    if (!target) return;
+    set({ remoteDataError: null });
+    try {
+      await ClientService.delete(id);
+      const updated = get().clients.filter((c) => c.id !== id);
+      set({ clients: updated });
+      setStorageItem('ndf_clients', updated);
+      await get().loadTenantData(target.tenantId);
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao remover cliente na API.' });
+      throw error;
+    }
   },
 
-  deleteProduct: (id) => {
+  addProduct: async (productData) => {
+    set({ remoteDataError: null });
+    try {
+      const newProduct = await ProductService.create(productData);
+      const updated = [...get().products.filter((product) => product.id !== newProduct.id), newProduct];
+      set({ products: updated });
+      setStorageItem('ndf_products', updated);
+      await get().loadTenantData(newProduct.tenantId);
+      return newProduct;
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao criar produto na API.' });
+      throw error;
+    }
+  },
+
+  updateProduct: async (id, updatedFields) => {
+    set({ remoteDataError: null });
+    try {
+      const serverProduct = await ProductService.update(id, updatedFields);
+      const updated = get().products.map((product) => (product.id === id ? serverProduct : product));
+      set({ products: updated });
+      setStorageItem('ndf_products', updated);
+      await get().loadTenantData(serverProduct.tenantId);
+      return serverProduct;
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao actualizar produto na API.' });
+      throw error;
+    }
+  },
+
+  deleteProduct: async (id) => {
     const target = get().products.find(p => p.id === id);
-    const updated = get().products.filter((p) => p.id !== id);
-    set({ products: updated });
-    setStorageItem('ndf_products', updated);
-    
-    if (target) {
-      get().addAuditLog({
-        userId: 'usr-928',
-        userName: 'Eng. Manuel Bento',
-        action: 'DELETE_PRODUCT',
-        details: `Produto removido: ${target.name}`,
-        ipAddress: '127.0.0.1',
-        tenantId: target.tenantId
-      });
-      ProductService.delete(id)
-        .then(() => get().loadTenantData(target.tenantId))
-        .catch((error) => set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao remover produto na API.' }));
+    if (!target) return;
+    set({ remoteDataError: null });
+    try {
+      await ProductService.delete(id);
+      const updated = get().products.filter((p) => p.id !== id);
+      set({ products: updated });
+      setStorageItem('ndf_products', updated);
+      await get().loadTenantData(target.tenantId);
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao remover produto na API.' });
+      throw error;
     }
   },
 
