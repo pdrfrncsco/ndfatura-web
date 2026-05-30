@@ -83,6 +83,9 @@ export interface Invoice {
   agtSyncDate?: string;
   agtResponseCode?: string;
   qrcodeString: string; // AGT validation QR Code string
+  cancelledAt?: string;
+  cancellationReason?: string;
+  cancelledBy?: string;
   notes?: string;
   tenantId: string;
   createdBy: string;

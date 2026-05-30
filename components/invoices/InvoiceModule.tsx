@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
 import { getApiFieldErrors } from '../../services/api';
+import { canIssueOrCancelInvoice } from '../../lib/rbac';
 import { Client, Product, Invoice, InvoiceItem, InvoiceType, InvoiceStatus } from '../../types/invoice';
 import { 
   FileText, 
@@ -51,7 +52,7 @@ function generateFaturaDates(invoiceType: string) {
 
 export default function InvoiceModule() {
   const { currentTenant, theme, user, addNotification } = useAuthStore();
-  const { clients, products, invoices, addInvoice, issueInvoice } = useDataStore();
+  const { clients, products, invoices, addInvoice, issueInvoice, cancelInvoice } = useDataStore();
 
   const [viewState, setViewState] = React.useState<'list' | 'create' | 'view'>('list');
   const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null);
@@ -72,6 +73,7 @@ export default function InvoiceModule() {
   const [notes, setNotes] = React.useState('');
   const [isSavingDraft, setIsSavingDraft] = React.useState(false);
   const [isIssuing, setIsIssuing] = React.useState(false);
+  const [isCancelling, setIsCancelling] = React.useState(false);
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
   const [invoiceItems, setInvoiceItems] = React.useState<Array<{
     productId: string;
@@ -826,7 +828,7 @@ export default function InvoiceModule() {
             </div>
 
             <div className="flex items-center gap-2">
-              {selectedInvoice.status === 'Draft' && (
+              {selectedInvoice.status === 'Draft' && canIssueOrCancelInvoice(user?.role) && (
                 <button
                   id="btn-issue-invoice"
                   disabled={isIssuing}
@@ -864,6 +866,49 @@ export default function InvoiceModule() {
                   title="A sincronização AGT será implementada com Celery na próxima fase."
                 >
                   AGT Sync Pendente
+                </button>
+              )}
+
+              {canIssueOrCancelInvoice(user?.role) &&
+                ['Issued', 'Paid', 'Partial', 'AGT_Synced', 'AGT_Error'].includes(selectedInvoice.status) && (
+                <button
+                  id="btn-cancel-invoice"
+                  disabled={isCancelling}
+                  onClick={async () => {
+                    const reason = window.prompt('Motivo do cancelamento fiscal (obrigatório):');
+                    if (!reason || reason.trim().length < 3) {
+                      addNotification({
+                        title: 'Cancelamento bloqueado',
+                        desc: 'Indique um motivo com pelo menos 3 caracteres.',
+                        type: 'warning'
+                      });
+                      return;
+                    }
+                    if (!window.confirm(`Confirmar cancelamento da factura ${selectedInvoice.invoiceNo}?`)) {
+                      return;
+                    }
+                    setIsCancelling(true);
+                    try {
+                      const cancelled = await cancelInvoice(selectedInvoice.id, reason.trim());
+                      setSelectedInvoice(cancelled);
+                      addNotification({
+                        title: 'Factura cancelada',
+                        desc: `Documento ${cancelled.invoiceNo} anulado fiscalmente.`,
+                        type: 'success'
+                      });
+                    } catch (error) {
+                      addNotification({
+                        title: 'Cancelamento bloqueado',
+                        desc: error instanceof Error ? error.message : 'Não foi possível cancelar a factura.',
+                        type: 'warning'
+                      });
+                    } finally {
+                      setIsCancelling(false);
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-lg shadow-sm"
+                >
+                  {isCancelling ? 'A cancelar...' : 'Cancelar Fiscalmente'}
                 </button>
               )}
 

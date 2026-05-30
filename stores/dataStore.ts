@@ -27,6 +27,7 @@ interface DataState {
   // Actions for Invoices
   addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceHash' | 'qrcodeString'>) => Promise<Invoice>;
   issueInvoice: (id: string) => Promise<Invoice>;
+  cancelInvoice: (id: string, reason: string) => Promise<Invoice>;
   updateInvoiceStatus: (id: string, status: Invoice['status']) => void;
   syncInvoiceWithAGT: (id: string) => void;
   addAuditLog: (log: Omit<AuditLog, 'id' | 'timestamp'>) => void;
@@ -473,6 +474,21 @@ export const useDataStore = create<DataState>((set, get) => ({
       return issuedInvoice;
     } catch (error) {
       set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao emitir documento fiscal na API.' });
+      throw error;
+    }
+  },
+
+  cancelInvoice: async (id, reason) => {
+    set({ remoteDataError: null });
+    try {
+      const cancelledInvoice = await InvoiceService.cancel(id, reason);
+      const updated = get().invoices.map((invoice) => (invoice.id === id ? cancelledInvoice : invoice));
+      set({ invoices: updated });
+      setStorageItem('ndf_invoices', updated);
+      await get().loadTenantData(cancelledInvoice.tenantId);
+      return cancelledInvoice;
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao cancelar documento fiscal na API.' });
       throw error;
     }
   },

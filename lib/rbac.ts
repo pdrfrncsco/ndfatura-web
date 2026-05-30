@@ -10,3 +10,7 @@ export function canWriteCatalog(role?: UserRole): boolean {
 export function canDeleteCatalog(role?: UserRole): boolean {
   return Boolean(role && FISCAL_MANAGER_ROLES.includes(role));
 }
+
+export function canIssueOrCancelInvoice(role?: UserRole): boolean {
+  return Boolean(role && FISCAL_MANAGER_ROLES.includes(role));
+}

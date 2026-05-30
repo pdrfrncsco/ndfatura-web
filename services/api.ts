@@ -355,6 +355,11 @@ export const InvoiceService = {
     return normalizeInvoice(unwrap(response));
   },
 
+  cancel: async (id: string, reason: string): Promise<Invoice> => {
+    const response = await apiClient.post<ApiEnvelope<Invoice>>(`/facturas/${id}/cancelar/`, { reason });
+    return normalizeInvoice(unwrap(response));
+  },
+
   updateStatus: async (): Promise<never> => {
     throw new Error('A alteração de estado fiscal será activada no milestone fiscal.');
   },
