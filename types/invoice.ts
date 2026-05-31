@@ -46,7 +46,7 @@ export interface Product {
 }
 
 export type InvoiceType = 'FT' | 'FR' | 'VD' | 'NC'; // FT (Fatura), FR (Fatura-Recibo), VD (Venda a Dinheiro), NC (Nota de Crédito)
-export type InvoiceStatus = 'Draft' | 'Issued' | 'Paid' | 'Cancelled' | 'AGT_Synced' | 'AGT_Error';
+export type InvoiceStatus = 'Draft' | 'Issued' | 'Paid' | 'Partial' | 'Cancelled' | 'AGT_Synced' | 'AGT_Error';
 
 export interface InvoiceItem {
   id: string;
@@ -79,6 +79,7 @@ export interface Invoice {
   withholdingTaxRate: number; // e.g., 6.5% standard for services
   withholdingTaxAmount: number;
   grandTotal: number; // Subtotal + Tax - Withholding
+  paidAmount: number;
   invoiceHash: string; // AGT validation signature hash e.g. "Z6yH-..."
   agtSyncDate?: string;
   agtResponseCode?: string;
@@ -115,4 +116,31 @@ export interface DashboardStats {
   monthlyRevenue: { month: string; value: number; tax: number; count: number }[];
   categorySales: { name: string; value: number }[];
   recentActivity: AuditLog[];
+}
+
+export type ReceiptStatus = 'Draft' | 'Issued' | 'Cancelled';
+export type PaymentMethod = 'CH' | 'TR' | 'TP' | 'DP' | 'OU';
+
+export interface ReceiptItem {
+  id: string;
+  invoice: string;
+  invoiceNo: string;
+  amountPaid: number;
+}
+
+export interface Receipt {
+  id: string;
+  receiptNo: string;
+  client: string;
+  clientName: string;
+  issueDate: string;
+  totalAmount: number;
+  paymentMethod: PaymentMethod;
+  status: ReceiptStatus;
+  receiptHash: string;
+  qrcodeString: string;
+  notes: string;
+  items: ReceiptItem[];
+  createdAt: string;
+  updatedAt: string;
 }

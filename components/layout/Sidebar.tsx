@@ -14,7 +14,8 @@ import {
   ChevronLeft, 
   Menu,
   Building,
-  Award
+  Award,
+  Wallet
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -34,6 +35,7 @@ export default function Sidebar({ onSearchFocus }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'invoices', label: 'Facturação', icon: FileText },
+    { id: 'payments', label: 'Recebimentos', icon: Wallet },
     { id: 'clients', label: 'Clientes', icon: Users },
     { id: 'products', label: 'Produtos e IVA', icon: Package },
     { id: 'reports', label: 'Relatórios & Mapas', icon: TrendingUp },

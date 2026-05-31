@@ -1,5 +1,5 @@
 import axios, { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { AuditLog, Client, DashboardStats, Invoice, Product, Tenant, User } from '../types/invoice';
+import { AuditLog, Client, DashboardStats, Invoice, Product, Receipt, Tenant, User } from '../types/invoice';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
 const ACCESS_TOKEN_KEY = 'ndf_access_token';
@@ -210,6 +210,7 @@ const normalizeInvoice = (invoice: Invoice): Invoice => ({
   withholdingTaxRate: toNumber(invoice.withholdingTaxRate),
   withholdingTaxAmount: toNumber(invoice.withholdingTaxAmount),
   grandTotal: toNumber(invoice.grandTotal),
+  paidAmount: toNumber(invoice.paidAmount),
   items: invoice.items.map((item) => ({
     ...item,
     quantity: toNumber(item.quantity),
@@ -219,6 +220,15 @@ const normalizeInvoice = (invoice: Invoice): Invoice => ({
     totalTax: toNumber(item.totalTax),
     subtotal: toNumber(item.subtotal),
     total: toNumber(item.total)
+  }))
+});
+
+const normalizeReceipt = (receipt: Receipt): Receipt => ({
+  ...receipt,
+  totalAmount: toNumber(receipt.totalAmount),
+  items: receipt.items.map((item) => ({
+    ...item,
+    amountPaid: toNumber(item.amountPaid)
   }))
 });
 
@@ -374,6 +384,33 @@ export const InvoiceService = {
   downloadPdf: async (id: string): Promise<Blob> => {
     const response = await apiClient.get(`/facturas/${id}/pdf/`, { responseType: 'blob' });
     return response.data as Blob;
+  }
+};
+
+export const ReceiptService = {
+  getAll: async (): Promise<Receipt[]> => {
+    const response = await apiClient.get<ApiEnvelope<Paginated<Receipt>>>('/recibos/');
+    return listFromResponse(response).map(normalizeReceipt);
+  },
+
+  getById: async (id: string): Promise<Receipt> => {
+    const response = await apiClient.get<ApiEnvelope<Receipt>>(`/recibos/${id}/`);
+    return normalizeReceipt(unwrap(response));
+  },
+
+  create: async (data: {
+    client: string;
+    payment_method: string;
+    items: { invoice_id: string; amount: number }[];
+    notes?: string;
+  }): Promise<Receipt> => {
+    const response = await apiClient.post<ApiEnvelope<Receipt>>('/recibos/', data);
+    return normalizeReceipt(unwrap(response));
+  },
+
+  issue: async (id: string): Promise<Receipt> => {
+    const response = await apiClient.post<ApiEnvelope<Receipt>>(`/recibos/${id}/emitir/`);
+    return normalizeReceipt(unwrap(response));
   }
 };
 

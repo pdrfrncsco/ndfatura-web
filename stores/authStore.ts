@@ -8,7 +8,7 @@ interface AuthState {
   currentTenant: Tenant | null;
   tenants: Tenant[];
   theme: 'light' | 'dark';
-  currentScreen: 'dashboard' | 'invoices' | 'clients' | 'products' | 'reports' | 'settings' | 'users' | 'audit_logs';
+  currentScreen: 'dashboard' | 'invoices' | 'payments' | 'clients' | 'products' | 'reports' | 'settings' | 'users' | 'audit_logs';
   sidebarCollapsed: boolean;
   notifications: Array<{ id: string; title: string; desc: string; time: string; read: boolean; type: 'success' | 'warning' | 'info' }>;
   
@@ -20,7 +20,7 @@ interface AuthState {
   updateTenantProfile: (updated: Partial<Tenant>) => void;
   toggleTheme: () => void;
   setTheme: (theme: 'light' | 'dark') => void;
-  setCurrentScreen: (screen: 'dashboard' | 'invoices' | 'clients' | 'products' | 'reports' | 'settings' | 'users' | 'audit_logs') => void;
+  setCurrentScreen: (screen: 'dashboard' | 'invoices' | 'payments' | 'clients' | 'products' | 'reports' | 'settings' | 'users' | 'audit_logs') => void;
   toggleSidebar: () => void;
   markNotificationsAsRead: () => void;
   addNotification: (noti: { title: string; desc: string; type: 'success' | 'warning' | 'info' }) => void;
@@ -31,7 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   currentTenant: null,
   tenants: [],
-  theme: 'dark', // Let's set dark as default for that sleek fintech look, fully togglable!
+  theme: 'dark', 
   currentScreen: 'dashboard',
   sidebarCollapsed: false,
   notifications: [
@@ -50,14 +50,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       time: 'Há 2 horas',
       read: false,
       type: 'warning'
-    },
-    {
-      id: 'noti-3',
-      title: 'Exportação SAF-T (AO)',
-      desc: 'Ficheiro XML SAF-T da empresa Sodiam foi gerado para auditoria fiscal.',
-      time: 'Ontem',
-      read: true,
-      type: 'info'
     }
   ],
 
