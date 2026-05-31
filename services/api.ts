@@ -365,8 +365,15 @@ export const InvoiceService = {
   },
 
   syncAGT: async (id: string) => {
-    const response = await apiClient.post<ApiEnvelope<{ detail: string }>>(`/facturas/${id}/sync-agt/`);
+    const response = await apiClient.post<ApiEnvelope<{ id: string; status: string; responseCode: string }>>(
+      `/facturas/${id}/sync-agt/`
+    );
     return unwrap(response);
+  },
+
+  downloadPdf: async (id: string): Promise<Blob> => {
+    const response = await apiClient.get(`/facturas/${id}/pdf/`, { responseType: 'blob' });
+    return response.data as Blob;
   }
 };
 

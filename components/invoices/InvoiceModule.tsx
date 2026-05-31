@@ -52,7 +52,7 @@ function generateFaturaDates(invoiceType: string) {
 
 export default function InvoiceModule() {
   const { currentTenant, theme, user, addNotification } = useAuthStore();
-  const { clients, products, invoices, addInvoice, issueInvoice, cancelInvoice } = useDataStore();
+  const { clients, products, invoices, addInvoice, issueInvoice, cancelInvoice, syncInvoiceWithAGT } = useDataStore();
 
   const [viewState, setViewState] = React.useState<'list' | 'create' | 'view'>('list');
   const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null);
@@ -74,6 +74,7 @@ export default function InvoiceModule() {
   const [isSavingDraft, setIsSavingDraft] = React.useState(false);
   const [isIssuing, setIsIssuing] = React.useState(false);
   const [isCancelling, setIsCancelling] = React.useState(false);
+  const [isSyncingAgt, setIsSyncingAgt] = React.useState(false);
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
   const [invoiceItems, setInvoiceItems] = React.useState<Array<{
     productId: string;
@@ -858,14 +859,34 @@ export default function InvoiceModule() {
                 </button>
               )}
 
-              {selectedInvoice.status === 'Issued' && (
+              {['Issued', 'AGT_Error'].includes(selectedInvoice.status) && canIssueOrCancelInvoice(user?.role) && (
                 <button
-                  id="btn-sync-now-agt-disabled"
-                  disabled
-                  className="px-3.5 py-1.5 bg-slate-500/40 text-white/70 text-[11px] font-bold rounded-lg shadow-sm cursor-not-allowed"
-                  title="A sincronização AGT será implementada com Celery na próxima fase."
+                  id="btn-sync-now-agt"
+                  disabled={isSyncingAgt}
+                  onClick={async () => {
+                    setIsSyncingAgt(true);
+                    try {
+                      await syncInvoiceWithAGT(selectedInvoice.id);
+                      const refreshed = invoices.find((item) => item.id === selectedInvoice.id);
+                      if (refreshed) setSelectedInvoice(refreshed);
+                      addNotification({
+                        title: 'Sincronização AGT',
+                        desc: 'Pedido de sincronização enviado para a fila.',
+                        type: 'success'
+                      });
+                    } catch (error) {
+                      addNotification({
+                        title: 'Sync AGT falhou',
+                        desc: error instanceof Error ? error.message : 'Não foi possível sincronizar com a AGT.',
+                        type: 'warning'
+                      });
+                    } finally {
+                      setIsSyncingAgt(false);
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg shadow-sm"
                 >
-                  AGT Sync Pendente
+                  {isSyncingAgt ? 'A sincronizar...' : 'Sincronizar AGT'}
                 </button>
               )}
 
