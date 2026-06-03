@@ -25,7 +25,10 @@ import {
   Tooltip, 
   PieChart, 
   Pie, 
-  Cell 
+  Cell,
+  BarChart,
+  Bar,
+  Legend
 } from 'recharts';
 
 export default function DashboardView() {
@@ -76,7 +79,9 @@ export default function DashboardView() {
     gradientStart: theme === 'dark' ? '#1d4ed8' : '#3b82f6',
     gradientEnd: theme === 'dark' ? '#0f172a' : '#eff6ff',
     gridColor: theme === 'dark' ? '#1e293b' : '#f1f5f9',
-    axisColor: theme === 'dark' ? '#94a3b8' : '#64748b'
+    axisColor: theme === 'dark' ? '#94a3b8' : '#64748b',
+    projected: '#3b82f6',
+    realized: '#10b981'
   };
 
   const pieColors = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6'];
@@ -303,6 +308,59 @@ export default function DashboardView() {
           </div>
         </div>
 
+      </div>
+
+      {/* 3.5 Projections vs Realized Chart */}
+      <div className={`p-6 rounded-xl border ${
+        theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'
+      }`}>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-sm font-bold font-sans">Projecção de Recebimentos vs Realizado</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">Fluxo de caixa previsto (Due Dates) vs Pagamentos confirmados</p>
+          </div>
+          <div className="flex items-center gap-4 text-[10px] font-mono font-bold uppercase">
+            <span className="flex items-center gap-1.5 text-blue-500">
+              <span className="h-2 w-2 rounded-full bg-blue-500" /> Previsto
+            </span>
+            <span className="flex items-center gap-1.5 text-emerald-500">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" /> Realizado
+            </span>
+          </div>
+        </div>
+
+        <div className="h-72 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={stats.projectionsRealized} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartThemeColors.gridColor} />
+              <XAxis 
+                dataKey="month" 
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: chartThemeColors.axisColor, fontSize: 10, fontFamily: 'monospace' }} 
+              />
+              <YAxis 
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: chartThemeColors.axisColor, fontSize: 10, fontFamily: 'monospace' }}
+                tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+              />
+              <Tooltip 
+                contentStyle={{
+                  backgroundColor: theme === 'dark' ? '#090d16' : '#ffffff',
+                  borderColor: theme === 'dark' ? '#1e293b' : '#e2e8f0',
+                  color: theme === 'dark' ? '#f8fafc' : '#0f172a',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                }}
+                formatter={(value) => [`${Number(value).toLocaleString('pt-PT')} AOA`]}
+              />
+              <Legend verticalAlign="top" height={36} align="right" wrapperStyle={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }} />
+              <Bar name="Previsto" dataKey="projected" fill={chartThemeColors.projected} radius={[4, 4, 0, 0]} barSize={32} />
+              <Bar name="Realizado" dataKey="realized" fill={chartThemeColors.realized} radius={[4, 4, 0, 0]} barSize={32} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       {/* 4. Bottom grid: Recent compliance audit logs */}

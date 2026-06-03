@@ -116,6 +116,7 @@ export interface DashboardStats {
   paidCount: number;
   syncSuccessRate: number;
   monthlyRevenue: { month: string; value: number; tax: number; count: number }[];
+  projectionsRealized?: { month: string; projected: number; realized: number }[];
   categorySales: { name: string; value: number }[];
   recentActivity: AuditLog[];
 }

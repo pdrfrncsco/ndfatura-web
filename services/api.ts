@@ -238,7 +238,12 @@ const normalizeDashboardStats = (stats: DashboardStats): DashboardStats => ({
   revenueCollected: toNumber(stats.revenueCollected),
   taxesCollected: toNumber(stats.taxesCollected),
   withholdingCollected: toNumber(stats.withholdingCollected),
-  pendingAmount: toNumber(stats.pendingAmount)
+  pendingAmount: toNumber(stats.pendingAmount),
+  projectionsRealized: stats.projectionsRealized?.map(p => ({
+    ...p,
+    projected: toNumber(p.projected),
+    realized: toNumber(p.realized)
+  }))
 });
 
 export const AuthService = {
@@ -451,5 +456,18 @@ export const SaftService = {
       xml: '',
       status: data.status
     };
+  }
+};
+export const ReportService = {
+  getIvaMap: async (year: number, month: number) => {
+    const response = await apiClient.get<ApiEnvelope<any>>('/relatorios/iva-map/', {
+      params: { year, month }
+    });
+    return unwrap(response);
+  },
+
+  getAccountStatement: async (clientId: string) => {
+    const response = await apiClient.get<ApiEnvelope<any>>(`/relatorios/account-statement/${clientId}/`);
+    return unwrap(response);
   }
 };
