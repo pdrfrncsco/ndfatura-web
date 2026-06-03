@@ -90,6 +90,8 @@ export interface Invoice {
   notes?: string;
   tenantId: string;
   createdBy: string;
+  originDocumentId?: string;
+  rectificationReason?: string;
 }
 
 export interface AuditLog {

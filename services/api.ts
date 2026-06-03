@@ -323,7 +323,7 @@ export const InvoiceService = {
   },
 
   create: async (invoiceData: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceHash' | 'qrcodeString'>): Promise<Invoice> => {
-    const response = await apiClient.post<ApiEnvelope<Invoice>>('/facturas/', {
+    const payload: any = {
       type: invoiceData.type,
       clientId: invoiceData.clientId,
       dueDate: invoiceData.dueDate,
@@ -335,12 +335,17 @@ export const InvoiceService = {
         price: item.price,
         discount: item.discount
       }))
-    });
+    };
+    if (invoiceData.type === 'NC') {
+      payload.originDocumentId = invoiceData.originDocumentId;
+      payload.rectificationReason = invoiceData.rectificationReason;
+    }
+    const response = await apiClient.post<ApiEnvelope<Invoice>>('/facturas/', payload);
     return normalizeInvoice(unwrap(response));
   },
 
   update: async (id: string, invoiceData: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceHash' | 'qrcodeString'>): Promise<Invoice> => {
-    const response = await apiClient.put<ApiEnvelope<Invoice>>(`/facturas/${id}/`, {
+    const payload: any = {
       type: invoiceData.type,
       clientId: invoiceData.clientId,
       dueDate: invoiceData.dueDate,
@@ -352,7 +357,12 @@ export const InvoiceService = {
         price: item.price,
         discount: item.discount
       }))
-    });
+    };
+    if (invoiceData.type === 'NC') {
+      payload.originDocumentId = invoiceData.originDocumentId;
+      payload.rectificationReason = invoiceData.rectificationReason;
+    }
+    const response = await apiClient.put<ApiEnvelope<Invoice>>(`/facturas/${id}/`, payload);
     return normalizeInvoice(unwrap(response));
   },
 

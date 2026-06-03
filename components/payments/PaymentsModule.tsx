@@ -155,6 +155,12 @@ export function PaymentsModule() {
             EMITIDO
           </span>
         );
+      case 'AGT_Synced':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-500 border border-blue-500/20">
+            SINCRONIZADO AGT
+          </span>
+        );
       case 'Draft':
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">

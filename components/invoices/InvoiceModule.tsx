@@ -71,6 +71,8 @@ export default function InvoiceModule() {
   const [invoiceStatus, setInvoiceStatus] = React.useState<'Draft' | 'Issued' | 'AGT_Synced'>('Draft');
   const [withholdingEnabled, setWithholdingEnabled] = React.useState(false);
   const [notes, setNotes] = React.useState('');
+  const [originDocumentId, setOriginDocumentId] = React.useState('');
+  const [rectificationReason, setRectificationReason] = React.useState('');
   const [isSavingDraft, setIsSavingDraft] = React.useState(false);
   const [isIssuing, setIsIssuing] = React.useState(false);
   const [isCancelling, setIsCancelling] = React.useState(false);
@@ -90,6 +92,8 @@ export default function InvoiceModule() {
     setInvoiceStatus('Draft');
     setWithholdingEnabled(false);
     setNotes('');
+    setOriginDocumentId('');
+    setRectificationReason('');
     setInvoiceItems([{ productId: '', quantity: 1, discountPercent: 0, price: 0 }]);
   };
 
@@ -205,11 +209,22 @@ export default function InvoiceModule() {
       return;
     }
 
+    if (invoiceType === 'NC') {
+      if (!originDocumentId) {
+        setFormErrors({ items: 'Seleccione a factura original para a Nota de Crédito.' });
+        return;
+      }
+      if (!rectificationReason) {
+        setFormErrors({ items: 'Indique o motivo da rectificação.' });
+        return;
+      }
+    }
+
     const { todayStr, dueDateStr } = generateFaturaDates(invoiceType);
 
     setIsSavingDraft(true);
     try {
-      const result = await addInvoice({
+      const payload: any = {
         type: invoiceType,
         status: 'Draft',
         issueDate: todayStr,
@@ -228,7 +243,14 @@ export default function InvoiceModule() {
         notes: notes || (withholdingEnabled ? 'Documento sujeito a Retenção na Fonte de 6.5% de IRT.' : undefined),
         tenantId: currentTenant.id,
         createdBy: user?.name || 'Equipa NDFATURA'
-      });
+      };
+
+      if (invoiceType === 'NC') {
+        payload.originDocumentId = originDocumentId;
+        payload.rectificationReason = rectificationReason;
+      }
+
+      const result = await addInvoice(payload);
 
       addNotification({
         title: 'Rascunho de factura criado',
@@ -254,15 +276,16 @@ export default function InvoiceModule() {
 
   // Status badges mapping
   const renderStatusBadge = (status: InvoiceStatus) => {
-    const configs = {
+    const configs: Record<string, { bg: string, label: string }> = {
       Draft: { bg: 'bg-slate-500/10 text-slate-400 border-slate-500/20', label: 'Rascunho' },
       Issued: { bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20', label: 'Emitido' },
       Paid: { bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', label: 'Liquidado' },
+      Partial: { bg: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20', label: 'Pag. Parcial' },
       Cancelled: { bg: 'bg-red-500/10 text-red-500 border-red-500/20', label: 'Anulado' },
       AGT_Synced: { bg: 'bg-indigo-500/10 text-blue-400 border-indigo-500/20', label: 'Certificado AGT' },
       AGT_Error: { bg: 'bg-amber-500/10 text-amber-500 border-amber-500/20', label: 'Erro Sinc' },
     };
-    const c = configs[status] || configs.Draft;
+    const c = configs[status as string] || configs.Draft;
     return (
       <span className={`px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${c.bg}`}>
         {c.label}
@@ -370,6 +393,7 @@ export default function InvoiceModule() {
                   <option value="FT">Fatura (FT)</option>
                   <option value="FR">Fatura-Recibo (FR)</option>
                   <option value="VD">Venda a Dinheiro (VD)</option>
+                  <option value="NC">Nota de Crédito (NC)</option>
                 </select>
               </div>
 
@@ -590,9 +614,46 @@ export default function InvoiceModule() {
                       <option value="FT">Fatura (FT - Pagamento Diferido)</option>
                       <option value="FR">Fatura-Recibo (FR - Pronto Pagamento)</option>
                       <option value="VD">Venda a Dinheiro (VD - Dinheiro Caixa)</option>
+                      <option value="NC">Nota de Crédito (NC - Rectificação)</option>
                     </select>
                   </div>
                 </div>
+
+                {invoiceType === 'NC' && selectedClientId && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-slate-500 block">Factura Original *</label>
+                      <select
+                        required
+                        value={originDocumentId}
+                        onChange={(e) => setOriginDocumentId(e.target.value)}
+                        className={`w-full text-xs border rounded-lg p-2 ${
+                          theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
+                        }`}
+                      >
+                        <option value="">-- Seleccione Factura --</option>
+                        {tenantInvoices
+                          .filter(i => i.clientId === selectedClientId && ['Issued', 'Paid', 'Partial', 'AGT_Synced'].includes(i.status) && i.type !== 'NC')
+                          .map(i => (
+                            <option key={i.id} value={i.id}>{i.invoiceNo} - {i.grandTotal.toLocaleString('pt-PT')} AOA</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-slate-500 block">Motivo da Rectificação *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ex: Devolução, Anulação, Erro de emissão..."
+                        value={rectificationReason}
+                        onChange={(e) => setRectificationReason(e.target.value)}
+                        className={`w-full text-xs border rounded-lg p-2 ${
+                          theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
+                        }`}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Line Items builder */}
@@ -999,8 +1060,8 @@ export default function InvoiceModule() {
                 </div>
 
                 <div className="text-right">
-                  <span className="text-3xl font-mono font-black text-slate-900 block tracking-tight">
-                    {selectedInvoice.type === 'FT' ? 'FATURA' : selectedInvoice.type === 'FR' ? 'FATURA-RECIBO' : 'VENDA A DINHEIRO'}
+                  <span className="text-3xl font-mono font-black text-slate-900 block tracking-tight uppercase">
+                    {selectedInvoice.type === 'NC' ? 'Nota de Crédito' : selectedInvoice.type === 'FT' ? 'Fatura' : selectedInvoice.type === 'FR' ? 'Fatura-Recibo' : 'Venda a Dinheiro'}
                   </span>
                   <span className="text-sm font-mono font-bold block text-slate-700 mt-1">
                     Documento N.º: {selectedInvoice.invoiceNo}
@@ -1021,6 +1082,14 @@ export default function InvoiceModule() {
                   <span className="text-xs font-bold font-sans text-slate-900">{selectedInvoice.clientName}</span>
                   <p className="mt-1 text-slate-500">NIF: <span className="font-bold text-slate-800">{selectedInvoice.clientNif}</span></p>
                   <p className="text-slate-500 mt-0.5">Endereço: {selectedInvoice.clientAddress}</p>
+                  
+                  {selectedInvoice.type === 'NC' && (
+                    <div className="mt-4">
+                      <span className="text-slate-400 font-bold block mb-1">REFERÊNCIA A DOCUMENTO ORIGINAL</span>
+                      <p className="text-slate-500">Documento: <span className="font-bold text-slate-800">{invoices.find(i => i.id === selectedInvoice.originDocumentId)?.invoiceNo || 'N/A'}</span></p>
+                      <p className="text-slate-500 mt-0.5">Motivo: {selectedInvoice.rectificationReason}</p>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="text-right shrink-0">
