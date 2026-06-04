@@ -33,7 +33,7 @@ interface DataState {
   issueInvoice: (id: string) => Promise<Invoice>;
   cancelInvoice: (id: string, reason: string) => Promise<Invoice>;
   updateInvoiceStatus: (id: string, status: Invoice['status']) => void;
-  syncInvoiceWithAGT: (id: string) => void;
+  syncInvoiceWithAGT: (id: string) => Promise<void>;
   addAuditLog: (log: Omit<AuditLog, 'id' | 'timestamp'>) => void;
   
   // Actions for Receipts
@@ -282,19 +282,24 @@ export const useDataStore = create<DataState>((set, get) => ({
     setStorageItem('ndf_invoices', updated);
   },
 
-  syncInvoiceWithAGT: (id) => {
-    const updated = get().invoices.map((i) => {
-      if (i.id === id) {
-        return {
-          ...i,
-          status: 'AGT_Synced' as const,
-        };
-      }
-      return i;
-    });
-    set({ invoices: updated });
-    setStorageItem('ndf_invoices', updated);
+  syncInvoiceWithAGT: async (id) => {
+    set({ remoteDataError: null });
+    try {
+      await InvoiceService.syncAGT(id);
+      // Actualizamos o estado local para pendente enquanto o worker processa
+      const updated = get().invoices.map((i) => {
+        if (i.id === id) {
+          return { ...i, status: 'Issued' as const }; // Mantemos Issued ou mudamos para algo indicativo
+        }
+        return i;
+      });
+      set({ invoices: updated });
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao solicitar sincronização AGT.' });
+      throw error;
+    }
   },
+
 
   addAuditLog: (logData) => {
     const newLog: AuditLog = {
