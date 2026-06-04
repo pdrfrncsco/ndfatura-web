@@ -469,5 +469,10 @@ export const ReportService = {
   getAccountStatement: async (clientId: string) => {
     const response = await apiClient.get<ApiEnvelope<any>>(`/relatorios/account-statement/${clientId}/`);
     return unwrap(response);
+  },
+
+  getAgingReport: async () => {
+    const response = await apiClient.get<ApiEnvelope<any>>('/relatorios/aging-report/');
+    return unwrap(response);
   }
 };

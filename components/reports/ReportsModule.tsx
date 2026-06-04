@@ -14,7 +14,8 @@ import {
   History,
   Calendar,
   User,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Clock
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -32,7 +33,7 @@ export default function ReportsModule() {
   const { theme, currentTenant, addNotification } = useAuthStore();
   const { invoices, clients, getDashboardStats } = useDataStore();
 
-  const [activeTab, setActiveTab] = React.useState<'saft' | 'iva' | 'statement'>('saft');
+  const [activeTab, setActiveTab] = React.useState<'saft' | 'iva' | 'statement' | 'aging'>('saft');
   
   // SAF-T State
   const [saftYear, setSaftYear] = React.useState(2026);
@@ -50,6 +51,10 @@ export default function ReportsModule() {
   const [selectedClientId, setSelectedClientId] = React.useState('');
   const [statementData, setStatementData] = React.useState<any>(null);
   const [isLoadingStatement, setIsLoadingStatement] = React.useState(false);
+
+  // Aging State
+  const [agingData, setAgingData] = React.useState<any[]>([]);
+  const [isLoadingAging, setIsLoadingAging] = React.useState(false);
 
   if (!currentTenant) return null;
 
@@ -98,6 +103,18 @@ export default function ReportsModule() {
     }
   };
 
+  const handleFetchAging = async () => {
+    setIsLoadingAging(true);
+    try {
+      const data = await ReportService.getAgingReport();
+      setAgingData(data);
+    } catch {
+      alert('Erro ao carregar relatório de antiguidade');
+    } finally {
+      setIsLoadingAging(false);
+    }
+  };
+
   const chartThemeColors = {
     gridColor: theme === 'dark' ? '#1e293b' : '#f1f5f9',
     axisColor: theme === 'dark' ? '#94a3b8' : '#64748b'
@@ -138,6 +155,12 @@ export default function ReportsModule() {
           className={`px-4 py-2 font-bold uppercase tracking-wider transition-colors ${activeTab === 'statement' ? 'border-b-2 border-blue-500 text-blue-500' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
           Conta Corrente
+        </button>
+        <button
+          onClick={() => { setActiveTab('aging'); handleFetchAging(); }}
+          className={`px-4 py-2 font-bold uppercase tracking-wider transition-colors ${activeTab === 'aging' ? 'border-b-2 border-blue-500 text-blue-500' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+        >
+          Antiguidade de Saldos
         </button>
       </div>
 
@@ -326,6 +349,60 @@ export default function ReportsModule() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'aging' && (
+        <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+          <div className="flex justify-between items-center mb-8">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Relatório de Antiguidade de Saldos (Aging)
+            </h3>
+            <button onClick={handleFetchAging} disabled={isLoadingAging} className="px-4 py-1.5 bg-blue-600/10 text-blue-500 font-bold rounded-lg text-[10px] hover:bg-blue-600/20 transition-all">
+              {isLoadingAging ? 'A carregar...' : 'Actualizar Dados'}
+            </button>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <tr>
+                  <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase">Cliente</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase text-right">Total em Dívida</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase text-right">Corrente</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase text-right">1-30 dias</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase text-right">31-60 dias</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase text-right">61-90 dias</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase text-right">+90 dias</th>
+                </tr>
+              </thead>
+              <tbody className="text-[11px]">
+                {agingData.length === 0 && !isLoadingAging ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500 italic">
+                      Nenhuma dívida pendente encontrada.
+                    </td>
+                  </tr>
+                ) : (
+                  agingData.map((row: any) => (
+                    <tr key={row.clientId} className="border-t border-slate-200 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                      <td className="px-4 py-4">
+                        <div className="font-bold text-slate-700 dark:text-slate-200">{row.clientName}</div>
+                        <div className="text-[10px] text-slate-500">{row.clientNif}</div>
+                      </td>
+                      <td className="px-4 py-4 font-mono text-right font-bold text-red-500">{row.totalDebt.toLocaleString('pt-PT')}</td>
+                      <td className="px-4 py-4 font-mono text-right text-slate-500">{row.current.toLocaleString('pt-PT')}</td>
+                      <td className="px-4 py-4 font-mono text-right text-orange-500/80">{row.overdue1_30.toLocaleString('pt-PT')}</td>
+                      <td className="px-4 py-4 font-mono text-right text-orange-600/90">{row.overdue31_60.toLocaleString('pt-PT')}</td>
+                      <td className="px-4 py-4 font-mono text-right text-red-500/80">{row.overdue61_90.toLocaleString('pt-PT')}</td>
+                      <td className="px-4 py-4 font-mono text-right font-black text-red-700">{row.overdue90plus.toLocaleString('pt-PT')}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
