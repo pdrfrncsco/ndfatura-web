@@ -34,8 +34,11 @@ const productSchema = z.object({
   code: z.string().min(2, 'O código de barras/artigo deve ter pelo menos 2 caracteres.'),
   name: z.string().min(3, 'O nome do produto/serviço deve ter pelo menos 3 caracteres.'),
   category: z.string().min(2, 'Seleccione ou escreva uma categoria.'),
+  type: z.enum(['P', 'S']),
   price: z.number().min(0, 'O preço unitário não pode ser inferior a 0 (AOA).'),
-  stock: z.number().int().min(0, 'O stock inicial não pode ser negativo.'),
+  costPrice: z.number().min(0).optional(),
+  stock: z.number().min(0, 'O stock inicial não pode ser negativo.'),
+  minStock: z.number().min(0).optional(),
   taxRate: z.number(),
   exemptionCode: z.string().optional(),
   unit: z.string().default('UN')
@@ -49,66 +52,27 @@ const productSchema = z.object({
   path: ["exemptionCode"]
 });
 
-export interface StockMovement {
-  id: string;
-  productId: string;
-  productName: string;
-  productCode: string;
-  type: 'In' | 'Out';
-  quantity: number;
-  reason: string;
-  timestamp: string;
-  operator: string;
-}
-
 export default function ProductsModule() {
   const { currentTenant, theme, user, addNotification } = useAuthStore();
-  const { products, addProduct, updateProduct, deleteProduct } = useDataStore();
+  const { products, addProduct, updateProduct, deleteProduct, adjustStock, fetchStockMovements } = useDataStore();
   const canWriteProducts = canWriteCatalog(user?.role);
   const canDeleteProducts = canDeleteCatalog(user?.role);
 
   // Navigation and extra views
   const [activeTab, setActiveTab] = React.useState<'catalog' | 'inventory'>('catalog');
-  const [stockMovements, setStockMovements] = React.useState<StockMovement[]>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('ndf_stock_movements');
-      if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch (e) {
-          // ignore
-        }
-      }
+  const [stockMovements, setStockMovements] = React.useState<any[]>([]);
+  const [isLoadingMovements, setIsLoadingMovements] = React.useState(false);
+
+  // Load movements when switching to inventory
+  React.useEffect(() => {
+    if (activeTab === 'inventory') {
+      setIsLoadingMovements(true);
+      fetchStockMovements().then(data => {
+        setStockMovements(data);
+        setIsLoadingMovements(false);
+      });
     }
-    const initialMovements: StockMovement[] = [
-      {
-        id: 'mv-01',
-        productId: 'prod-002',
-        productName: 'Subscrição Anual NDFATURA Cloud Enterprise SaaS',
-        productCode: 'LIC-ERP-02',
-        type: 'In',
-        quantity: 50,
-        reason: 'Entrada por Reposição',
-        timestamp: '2026-05-24 10:15:30',
-        operator: 'Eng. Manuel Bento'
-      },
-      {
-        id: 'mv-02',
-        productId: 'prod-004',
-        productName: 'Switch de Rede Gerível Core Fiber (Acessórios)',
-        productCode: 'HARD-04',
-        type: 'Out',
-        quantity: 2,
-        reason: 'Saída por Quebra / Dano',
-        timestamp: '2026-05-23 14:05:12',
-        operator: 'Eng. Manuel Bento'
-      }
-    ];
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ndf_stock_movements', JSON.stringify(initialMovements));
-    }
-    return initialMovements;
-  });
+  }, [activeTab, fetchStockMovements]);
 
   // Adjustment Modal State
   const [adjustmentModalOpen, setAdjustmentModalOpen] = React.useState(false);
@@ -135,8 +99,11 @@ export default function ProductsModule() {
   const [code, setCode] = React.useState('');
   const [name, setName] = React.useState('');
   const [category, setCategory] = React.useState('Serviços');
+  const [type, setType] = React.useState<'P' | 'S'>('P');
   const [price, setPrice] = React.useState(0);
+  const [costPrice, setCostPrice] = React.useState(0);
   const [stock, setStock] = React.useState(100);
+  const [minStock, setMinStock] = React.useState(5);
   const [taxRate, setTaxRate] = React.useState(14); // 14% Standard Angola rate
   const [exemptionCode, setExemptionCode] = React.useState('');
   const [unit, setUnit] = React.useState('UN');
@@ -152,7 +119,7 @@ export default function ProductsModule() {
     setAdjustmentModalOpen(true);
   };
 
-  const handleSaveAdjustment = (e: React.FormEvent) => {
+  const handleSaveAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adjProduct) return;
 
@@ -161,54 +128,23 @@ export default function ProductsModule() {
       return;
     }
 
-    const currentStock = adjProduct.stock;
-    let newStock = currentStock;
-
-    if (adjType === 'In') {
-      newStock += adjQty;
-    } else {
-      if (currentStock < adjQty) {
-        alert('Erro: A quantidade de saída excede o stock disponível em armazém.');
-        return;
-      }
-      newStock -= adjQty;
-    }
-
-    // Call store update
-    updateProduct(adjProduct.id, { stock: newStock }).catch((error) => {
+    try {
+      const movement = await adjustStock(adjProduct.id, adjQty, adjType, adjReason);
+      setStockMovements([movement, ...stockMovements]);
+      
       addNotification({
-        title: 'Ajuste não sincronizado',
+        title: 'Ajuste de Stock Concluído',
+        desc: `Movimentação de ${adjType === 'In' ? '+' : '-'}${adjQty} unidades registada para o artigo: ${adjProduct.name}.`,
+        type: 'success'
+      });
+      setAdjustmentModalOpen(false);
+    } catch (error) {
+       addNotification({
+        title: 'Falha no Ajuste',
         desc: error instanceof Error ? error.message : 'Falha ao actualizar stock na API.',
         type: 'warning'
       });
-    });
-
-    // Append to stock movements trail
-    const newMovement: StockMovement = {
-      id: `mv-${Date.now()}`,
-      productId: adjProduct.id,
-      productName: adjProduct.name,
-      productCode: adjProduct.code,
-      type: adjType,
-      quantity: adjQty,
-      reason: adjReason,
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      operator: 'Eng. Manuel Bento'
-    };
-
-    const updatedMovements = [newMovement, ...stockMovements];
-    setStockMovements(updatedMovements);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ndf_stock_movements', JSON.stringify(updatedMovements));
     }
-
-    addNotification({
-      title: 'Ajuste de Stock Concluído',
-      desc: `Movimentação de ${adjType === 'In' ? '+' : '-'}${adjQty} unidades registada para o artigo: ${adjProduct.name}.`,
-      type: 'success'
-    });
-
-    setAdjustmentModalOpen(false);
   };
 
   if (!currentTenant) return null;
@@ -217,11 +153,11 @@ export default function ProductsModule() {
   const uniqueCategories = Array.from(new Set(tenantProducts.map(p => p.category)));
 
   // Inventory stats
-  const physicalProducts = tenantProducts.filter(p => p.unit !== 'SERV');
-  const lowStockProducts = physicalProducts.filter(p => p.stock > 0 && p.stock <= 5);
+  const physicalProducts = tenantProducts.filter(p => p.type === 'P');
+  const lowStockProducts = physicalProducts.filter(p => p.stock > 0 && p.stock <= (p.minStock || 5));
   const outOfStockProducts = physicalProducts.filter(p => p.stock === 0);
-  const totalPhysicalUnits = physicalProducts.reduce((acc, cur) => acc + cur.stock, 0);
-  const totalStockValue = physicalProducts.reduce((acc, cur) => acc + (cur.price * cur.stock), 0);
+  const totalPhysicalUnits = physicalProducts.reduce((acc, cur) => acc + Number(cur.stock), 0);
+  const totalStockValue = physicalProducts.reduce((acc, cur) => acc + (cur.price * Number(cur.stock)), 0);
 
   // Filtered inventory products
   const filteredInventoryProducts = tenantProducts.filter(p => {
@@ -230,11 +166,11 @@ export default function ProductsModule() {
                           p.category.toLowerCase().includes(searchTermInventory.toLowerCase());
     let matchesStatus = true;
     if (inventoryStatusFilter === 'CRITICAL') {
-      matchesStatus = p.unit !== 'SERV' && p.stock > 0 && p.stock <= 5;
+      matchesStatus = p.type === 'P' && p.stock > 0 && p.stock <= (p.minStock || 5);
     } else if (inventoryStatusFilter === 'OUT_OF_STOCK') {
-      matchesStatus = p.unit !== 'SERV' && p.stock === 0;
+      matchesStatus = p.type === 'P' && p.stock === 0;
     } else if (inventoryStatusFilter === 'OK') {
-      matchesStatus = p.unit === 'SERV' || p.stock > 5;
+      matchesStatus = p.type === 'S' || p.stock > (p.minStock || 5);
     }
     return matchesSearch && matchesStatus;
   });
@@ -259,8 +195,11 @@ export default function ProductsModule() {
     setCode(`PROD-${Math.floor(Math.random() * 899 + 100)}`);
     setName('');
     setCategory('Serviços');
+    setType('P');
     setPrice(0);
+    setCostPrice(0);
     setStock(100);
+    setMinStock(5);
     setTaxRate(14);
     setExemptionCode('');
     setUnit('UN');
@@ -274,8 +213,11 @@ export default function ProductsModule() {
     setCode(p.code);
     setName(p.name);
     setCategory(p.category);
+    setType(p.type);
     setPrice(p.price);
+    setCostPrice(p.costPrice || 0);
     setStock(p.stock);
+    setMinStock(p.minStock || 5);
     setTaxRate(p.taxRate);
     setExemptionCode(p.exemptionCode || '');
     setUnit(p.unit);
@@ -291,8 +233,11 @@ export default function ProductsModule() {
       code,
       name,
       category,
+      type,
       price,
+      costPrice,
       stock,
+      minStock,
       taxRate,
       exemptionCode: taxRate === 0 ? exemptionCode : undefined,
       unit
@@ -322,6 +267,7 @@ export default function ProductsModule() {
       } else {
         await addProduct({
           ...formData,
+          isActive: true,
           tenantId: currentTenant.id
         });
         addNotification({
@@ -471,7 +417,7 @@ export default function ProductsModule() {
               </div>
             ) : (
               currentProducts.map((p) => {
-                const isLowStock = p.stock <= 5 && p.unit !== 'SERV';
+                const isLowStock = p.stock <= (p.minStock || 5) && p.type === 'P';
                 return (
                   <div 
                     key={p.id} 
@@ -514,7 +460,7 @@ export default function ProductsModule() {
                         {p.name}
                       </h3>
                       <p className="text-[10px] text-slate-500 font-medium mt-1 uppercase flex items-center gap-1">
-                        <Layers className="h-3 w-3 text-blue-500" />
+                        {p.type === 'S' ? <RefreshCw className="h-3 w-3 text-blue-500" /> : <Layers className="h-3 w-3 text-emerald-500" />}
                         <span>{p.category}</span>
                       </p>
 
@@ -522,7 +468,7 @@ export default function ProductsModule() {
                         <div className="space-y-0.5">
                           <span className="text-[9px] text-slate-500 font-mono block">Preço Unitário</span>
                           <strong className="text-xs sm:text-sm font-bold font-mono text-blue-500">
-                            {p.price.toLocaleString('pt-PT')} AOA
+                            {Number(p.price).toLocaleString('pt-PT')} AOA
                           </strong>
                         </div>
 
@@ -539,14 +485,14 @@ export default function ProductsModule() {
                       <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
                         <span className="flex items-center gap-1">
                           <Archive className="h-3.5 w-3.5 text-slate-400" />
-                          Unidade de Venda: <strong className="font-semibold text-slate-700 dark:text-slate-300">{p.unit}</strong>
+                          Unidade: <strong className="font-semibold text-slate-700 dark:text-slate-300">{p.unit}</strong>
                         </span>
 
                         {isLowStock ? (
                           <span className="text-[9px] px-2 py-0.5 bg-red-500/10 text-red-500 font-bold tracking-tight rounded border border-red-500/10 flex items-center gap-1 animate-pulse">
                             <AlertTriangle className="h-3 w-3" /> Crítico ({p.stock})
                           </span>
-                        ) : p.unit === 'SERV' ? (
+                        ) : p.type === 'S' ? (
                           <span className="text-[9px] px-2 py-0.5 bg-blue-500/10 text-blue-500 font-semibold rounded border border-blue-500/10">
                             Serviço (Ilimitado)
                           </span>
@@ -706,9 +652,9 @@ export default function ProductsModule() {
                 }`}
               >
                 <option value="ALL">Todo o Catálogo</option>
-                <option value="OK">Estável (&gt; 5)</option>
-                <option value="CRITICAL">Baixo Stock (1 a 5)</option>
-                <option value="OUT_OF_STOCK">Esgotado (0)</option>
+                <option value="OK">Estável</option>
+                <option value="CRITICAL">Baixo Stock</option>
+                <option value="OUT_OF_STOCK">Esgotado</option>
               </select>
             </div>
           </div>
@@ -744,16 +690,16 @@ export default function ProductsModule() {
                     </tr>
                   ) : (
                     filteredInventoryProducts.map(p => {
-                      const isServ = p.unit === 'SERV';
+                      const isServ = p.type === 'S';
                       const isOutOfStock = p.stock === 0;
-                      const isCritical = p.stock > 0 && p.stock <= 5;
+                      const isCritical = p.stock > 0 && p.stock <= (p.minStock || 5);
                       
                       return (
                         <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10 transition-colors">
                           <td className="px-5 py-3 font-mono font-bold text-[11px] text-blue-500">{p.code}</td>
                           <td className="px-5 py-3 font-semibold text-slate-800 dark:text-slate-150 select-text max-w-xs truncate" title={p.name}>{p.name}</td>
                           <td className="px-5 py-3"><span className="px-2 py-0.5 capitalize bg-slate-100 dark:bg-slate-900 text-slate-500 rounded text-[10px]">{p.category}</span></td>
-                          <td className="px-5 py-3 text-right font-mono font-semibold">{p.price.toLocaleString('pt-PT')},00</td>
+                          <td className="px-5 py-3 text-right font-mono font-semibold">{Number(p.price).toLocaleString('pt-PT')},00</td>
                           <td className="px-5 py-3 text-center"><span className="font-bold text-[10px]">{p.unit}</span></td>
                           <td className={`px-5 py-3 text-center font-bold font-mono text-[13px] ${
                             isServ ? 'text-slate-400' : isOutOfStock ? 'text-red-500' : isCritical ? 'text-amber-500' : 'text-emerald-500'
@@ -810,7 +756,9 @@ export default function ProductsModule() {
             </div>
 
             <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-2">
-              {stockMovements.length === 0 ? (
+              {isLoadingMovements ? (
+                 <p className="text-center py-6 text-slate-500 italic text-[11px]">A carregar movimentações...</p>
+              ) : stockMovements.length === 0 ? (
                 <p className="text-center py-6 text-slate-500 italic text-[11px]">Nenhuma movimentação física registada recentemente.</p>
               ) : (
                 stockMovements.map(m => {
@@ -833,7 +781,7 @@ export default function ProductsModule() {
                           <div className="flex items-center gap-3 text-[10px] text-slate-500 font-mono pt-1">
                             <span>Razão: <strong className="font-semibold text-slate-600 dark:text-slate-400">{m.reason}</strong></span>
                             <span>•</span>
-                            <span>Data: {m.timestamp}</span>
+                            <span>Data: {new Date(m.timestamp).toLocaleString()}</span>
                           </div>
                         </div>
                       </div>
@@ -841,13 +789,13 @@ export default function ProductsModule() {
                       <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-t-0 pt-2.5 md:pt-0 border-slate-200 dark:border-slate-800">
                         <div className="text-right">
                           <div className="text-[10px] text-slate-400 font-mono">Operador</div>
-                          <div className="font-bold text-slate-700 dark:text-slate-350 text-[10px] mt-0.5">{m.operator}</div>
+                          <div className="font-bold text-slate-700 dark:text-slate-350 text-[10px] mt-0.5">{m.operatorName}</div>
                         </div>
                         <div className="text-right">
                           <span className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono tracking-tight ${
                             isIn ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
                           }`}>
-                            {isIn ? '+' : '-'}{m.quantity} UN
+                            {isIn ? '+' : '-'}{m.quantity} {m.unit || 'UN'}
                           </span>
                         </div>
                       </div>
@@ -1017,7 +965,7 @@ export default function ProductsModule() {
       {/* ADD / EDIT PRODUCT MODAL DOCK */}
       {modalOpen && (
         <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className={`w-full max-w-xl rounded-xl border p-6 space-y-5 max-h-[90vh] overflow-y-auto ${
+          <div className={`w-full max-w-2xl rounded-xl border p-6 space-y-5 max-h-[90vh] overflow-y-auto ${
             theme === 'dark' ? 'bg-slate-950 border-slate-900 text-slate-100' : 'bg-white border-slate-200'
           }`}>
             <div className="flex justify-between items-center border-b pb-3 border-slate-900/10 dark:border-slate-800/40">
@@ -1036,7 +984,23 @@ export default function ProductsModule() {
 
             <form onSubmit={handleSaveProduct} className="space-y-4 text-xs select-none">
               
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                {/* Type */}
+                <div className="space-y-1.5 col-span-1">
+                  <label className="text-[11px] font-bold text-slate-500 block">Tipo *</label>
+                  <select
+                    id="input-product-type"
+                    value={type}
+                    onChange={(e) => setType(e.target.value as 'P' | 'S')}
+                    className={`w-full text-xs p-2.5 border rounded-lg ${
+                      theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-850'
+                    }`}
+                  >
+                    <option value="P">Produto (Físico)</option>
+                    <option value="S">Serviço (Intangível)</option>
+                  </select>
+                </div>
+
                 {/* Code */}
                 <div className="space-y-1.5 col-span-1">
                   <label className="text-[11px] font-bold text-slate-500 block">Código Artigo *</label>
@@ -1056,12 +1020,12 @@ export default function ProductsModule() {
 
                 {/* Category */}
                 <div className="space-y-1.5 col-span-1 sm:col-span-2">
-                  <label className="text-[11px] font-bold text-slate-500 block">Categoria / Linha de Negócio *</label>
+                  <label className="text-[11px] font-bold text-slate-500 block">Categoria *</label>
                   <input
                     id="input-product-category"
                     type="text"
                     required
-                    placeholder="Ex: Serviços, Licenciamento, Combustível, Hardware"
+                    placeholder="Ex: Serviços, Licenciamento, Hardware"
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
                     className={`w-full text-xs p-2.5 border rounded-lg ${
@@ -1089,11 +1053,10 @@ export default function ProductsModule() {
                 {formErrors.name && <p className="text-[10px] text-red-500 font-mono mt-0.5">{formErrors.name}</p>}
               </div>
 
-              {/* Price, Stock and Unit */}
+              {/* Price and Cost */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Price */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500 block">Preço Unitário (AOA) *</label>
+                  <label className="text-[11px] font-bold text-slate-500 block">Preço de Venda (AOA) *</label>
                   <input
                     id="input-product-price"
                     type="number"
@@ -1105,27 +1068,20 @@ export default function ProductsModule() {
                       theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200 focus:border-blue-500' : 'bg-slate-50 border-slate-200 text-slate-800'
                     }`}
                   />
-                  {formErrors.price && <p className="text-[10px] text-red-500 font-mono mt-0.5">{formErrors.price}</p>}
                 </div>
-
-                {/* Stock */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500 block">Stock Inicial *</label>
+                  <label className="text-[11px] font-bold text-slate-500 block">Preço de Custo (AOA)</label>
                   <input
-                    id="input-product-stock"
+                    id="input-product-cost"
                     type="number"
                     min="0"
-                    required
-                    value={stock}
-                    onChange={(e) => setStock(Number(e.target.value))}
+                    value={costPrice || ''}
+                    onChange={(e) => setCostPrice(Number(e.target.value))}
                     className={`w-full text-xs p-2.5 border rounded-lg font-mono ${
-                      theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200 focus:border-blue-500' : 'bg-slate-50 border-slate-200 text-slate-800'
+                      theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
                     }`}
                   />
-                  {formErrors.stock && <p className="text-[10px] text-red-500 font-mono mt-0.5">{formErrors.stock}</p>}
                 </div>
-
-                {/* Unit of sale */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-bold text-slate-500 block">Unidade de Venda *</label>
                   <select
@@ -1145,9 +1101,41 @@ export default function ProductsModule() {
                 </div>
               </div>
 
+              {/* Stock and Min Stock */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-500 block">Stock Inicial *</label>
+                  <input
+                    id="input-product-stock"
+                    type="number"
+                    min="0"
+                    disabled={isEditMode}
+                    required
+                    value={stock}
+                    onChange={(e) => setStock(Number(e.target.value))}
+                    className={`w-full text-xs p-2.5 border rounded-lg font-mono ${
+                      theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200 focus:border-blue-500' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    } disabled:opacity-50`}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-500 block">Stock de Alerta (Mínimo) *</label>
+                  <input
+                    id="input-product-min-stock"
+                    type="number"
+                    min="0"
+                    required
+                    value={minStock}
+                    onChange={(e) => setMinStock(Number(e.target.value))}
+                    className={`w-full text-xs p-2.5 border rounded-lg font-mono ${
+                      theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200 focus:border-blue-500' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  />
+                </div>
+              </div>
+
               {/* Tax configuration (IVA and exemption) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-950/10 dark:border-slate-900/40">
-                {/* Direct Tax */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-bold text-slate-500 block">Alíquota IVA em Angola *</label>
                   <select
@@ -1165,7 +1153,6 @@ export default function ProductsModule() {
                   </select>
                 </div>
 
-                {/* Exemption code */}
                 {taxRate === 0 && (
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-slate-500 block">Motivo de Isenção Oficial (AGT) *</label>
@@ -1184,12 +1171,10 @@ export default function ProductsModule() {
                       <option value="M15">M15 - IVA - Regime de Exclusão (Microempresas)</option>
                       <option value="M16">M16 - Isenção por acordo bilateral internacional</option>
                     </select>
-                    {formErrors.exemptionCode && <p className="text-[10px] text-red-500 font-mono mt-0.5">{formErrors.exemptionCode}</p>}
                   </div>
                 )}
               </div>
 
-              {/* Actions submit */}
               <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-900/10 dark:border-slate-800/40">
                 <button
                   id="btn-dismiss-product-modal"

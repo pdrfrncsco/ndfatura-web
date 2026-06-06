@@ -313,6 +313,20 @@ export const ProductService = {
 
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/produtos/${id}/`);
+  },
+
+  adjustStock: async (id: string, quantity: number, type: 'In' | 'Out', reason: string): Promise<StockMovement> => {
+    const response = await apiClient.post<ApiEnvelope<StockMovement>>(`/produtos/${id}/adjust-stock/`, {
+      quantity,
+      type,
+      reason
+    });
+    return unwrap(response);
+  },
+
+  getMovements: async (): Promise<StockMovement[]> => {
+    const response = await apiClient.get<ApiEnvelope<StockMovement[]>>('/movimentos-stock/');
+    return unwrap(response);
   }
 };
 

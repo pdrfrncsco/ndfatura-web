@@ -27,6 +27,8 @@ interface DataState {
   addProduct: (product: Omit<Product, 'id'>) => Promise<Product>;
   updateProduct: (id: string, updated: Partial<Product>) => Promise<Product>;
   deleteProduct: (id: string) => Promise<void>;
+  adjustStock: (productId: string, quantity: number, type: 'In' | 'Out', reason: string) => Promise<StockMovement>;
+  fetchStockMovements: () => Promise<StockMovement[]>;
   
   // Actions for Invoices
   addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceHash' | 'qrcodeString'>) => Promise<Invoice>;
@@ -226,6 +228,35 @@ export const useDataStore = create<DataState>((set, get) => ({
     } catch (error) {
       set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao remover produto na API.' });
       throw error;
+    }
+  },
+
+  adjustStock: async (productId, quantity, type, reason) => {
+    set({ remoteDataError: null });
+    try {
+      const movement = await ProductService.adjustStock(productId, quantity, type, reason);
+      const updatedProducts = get().products.map(p => {
+        if (p.id === productId) {
+          const newStock = type === 'In' ? Number(p.stock) + quantity : Number(p.stock) - quantity;
+          return { ...p, stock: newStock };
+        }
+        return p;
+      });
+      set({ products: updatedProducts });
+      setStorageItem('ndf_products', updatedProducts);
+      return movement;
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao ajustar stock na API.' });
+      throw error;
+    }
+  },
+
+  fetchStockMovements: async () => {
+    try {
+      return await ProductService.getMovements();
+    } catch (error) {
+      console.error('Error fetching movements:', error);
+      return [];
     }
   },
 

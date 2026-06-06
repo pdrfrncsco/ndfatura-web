@@ -37,13 +37,31 @@ export interface Product {
   code: string;
   name: string;
   category: string;
+  type: 'P' | 'S';
   price: number;
+  costPrice?: number;
   stock: number;
+  minStock?: number;
   taxRate: number; // e.g., 14, 7, 5, 0 (IVA)
   exemptionCode?: string; // required if taxRate === 0 (e.g. M10 - Isento Artigo 9º, etc.)
   tenantId: string;
   unit: string; // e.g., 'UN', 'KG', 'L', 'SERV'
+  isActive: boolean;
 }
+
+export interface StockMovement {
+  id: string;
+  product: string;
+  productName: string;
+  productCode: string;
+  type: 'In' | 'Out';
+  quantity: number;
+  reason: string;
+  operator: string;
+  operatorName: string;
+  timestamp: string;
+}
+
 
 export type InvoiceType = 'FT' | 'FR' | 'VD' | 'NC'; // FT (Fatura), FR (Fatura-Recibo), VD (Venda a Dinheiro), NC (Nota de Crédito)
 export type InvoiceStatus = 'Draft' | 'Issued' | 'Paid' | 'Partial' | 'Cancelled' | 'AGT_Synced' | 'AGT_Error';
