@@ -15,21 +15,27 @@ export interface Tenant {
   address: string;
   city: string;
   country: string;
-  fiscalRegime: string; // e.g., 'Regime Geral', 'Regime Simplificado', 'Regime de Exclusão'
+  fiscalRegime: string;
   logoUrl?: string;
-  agtCertificateNo?: string; // Standard AGT software certification e.g. "250/AGT/2026"
+  agtCertificateNo?: string;
 }
 
-export interface Client {
+export interface Estabelecimento {
   id: string;
+  code: string;
   name: string;
-  nif: string;
-  email: string;
-  phone?: string;
   address: string;
   city: string;
-  country: string;
-  tenantId: string;
+  phone?: string;
+  email?: string;
+  isActive: boolean;
+}
+
+export interface ExchangeRate {
+  id: string;
+  currencyCode: string;
+  rate: number;
+  date: string;
 }
 
 export interface Product {
@@ -62,8 +68,18 @@ export interface StockMovement {
   timestamp: string;
 }
 
+export interface Client {
+  id: string;
+  name: string;
+  nif: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  tenantId: string;
+}
 
-export type InvoiceType = 'FT' | 'FR' | 'VD' | 'NC'; // FT (Fatura), FR (Fatura-Recibo), VD (Venda a Dinheiro), NC (Nota de Crédito)
+export type InvoiceType = 'FT' | 'FR' | 'NC' | 'VD';
 export type InvoiceStatus = 'Draft' | 'Issued' | 'Paid' | 'Partial' | 'Cancelled' | 'AGT_Synced' | 'AGT_Error';
 
 export interface InvoiceItem {
@@ -73,17 +89,21 @@ export interface InvoiceItem {
   quantity: number;
   price: number;
   taxRate: number;
-  discount: number; // percentage e.g., 5 for 5%
+  discount: number;
   totalTax: number;
-  subtotal: number; // net of discount and tax
-  total: number; // gross with tax
+  subtotal: number;
+  total: number;
 }
 
 export interface Invoice {
   id: string;
-  invoiceNo: string; // FT 2026/001
+  invoiceNo: string;
+  estabelecimentoId?: string;
+  estabelecimentoCode?: string;
   type: InvoiceType;
   status: InvoiceStatus;
+  currency: string;
+  exchangeRate: number;
   issueDate: string;
   dueDate: string;
   clientId: string;
@@ -91,60 +111,58 @@ export interface Invoice {
   clientNif: string;
   clientAddress: string;
   items: InvoiceItem[];
-  subtotal: number; // Before taxes and discount
+  subtotal: number;
   discountTotal: number;
   taxTotal: number;
-  withholdingTaxRate: number; // e.g., 6.5% standard for services
+  withholdingTaxRate: number;
   withholdingTaxAmount: number;
-  grandTotal: number; // Subtotal + Tax - Withholding
-  paidAmount: number;
-  invoiceHash: string; // AGT validation signature hash e.g. "Z6yH-..."
+  grandTotal: number;
+  invoiceHash: string;
+  previousHash: string;
   agtSyncDate?: string;
   agtResponseCode?: string;
-  qrcodeString: string; // AGT validation QR Code string
+  qrcodeString: string;
   cancelledAt?: string;
   cancellationReason?: string;
   cancelledBy?: string;
-  notes?: string;
-  tenantId: string;
-  createdBy: string;
+  notes: string;
   originDocumentId?: string;
   rectificationReason?: string;
+  tenantId: string;
+  createdBy: string;
 }
 
 export interface AuditLog {
   id: string;
   timestamp: string;
-  userId: string;
+  user: string;
   userName: string;
-  action: string; // e.g. "CREATE_INVOICE", "VOID_INVOICE", "EXPORT_SAFT"
+  action: string;
   details: string;
-  ipAddress: string;
-  tenantId: string;
+  entityType: string;
+  entityId: string;
 }
 
 export interface DashboardStats {
-  totalInvoiced: number;
-  revenueCollected: number;
-  taxesCollected: number;
+  totalRevenue: number;
+  ivaCollected: number;
   withholdingCollected: number;
   pendingAmount: number;
   draftCount: number;
   issuedCount: number;
   paidCount: number;
   syncSuccessRate: number;
-  monthlyRevenue: { month: string; value: number; tax: number; count: number }[];
-  projectionsRealized?: { month: string; projected: number; realized: number }[];
-  categorySales: { name: string; value: number }[];
+  monthlyRevenue: Array<{ month: string, amount: number, tax: number }>;
+  categorySales: Array<{ category: string, value: number }>;
   recentActivity: AuditLog[];
 }
 
+export type PaymentMethod = 'NU' | 'TB' | 'CC' | 'OU';
 export type ReceiptStatus = 'Draft' | 'Issued' | 'Cancelled';
-export type PaymentMethod = 'CH' | 'TR' | 'TP' | 'DP' | 'OU';
 
 export interface ReceiptItem {
   id: string;
-  invoice: string;
+  invoiceId: string;
   invoiceNo: string;
   amountPaid: number;
 }
@@ -152,8 +170,9 @@ export interface ReceiptItem {
 export interface Receipt {
   id: string;
   receiptNo: string;
-  client: string;
+  clientId: string;
   clientName: string;
+  clientNif: string;
   issueDate: string;
   totalAmount: number;
   paymentMethod: PaymentMethod;
