@@ -41,7 +41,7 @@ export default function Sidebar({ onSearchFocus }: SidebarProps) {
     { id: 'reports', label: 'Relatórios & Mapas', icon: TrendingUp },
     { id: 'users', label: 'Utilizadores', icon: ShieldCheck },
     { id: 'audit_logs', label: 'Logs de Auditoria', icon: History },
-    { id: 'settings', label: 'Parâmetros ERP', icon: Settings },
+    { id: 'settings', label: 'Configurações', icon: Settings },
   ] as const;
 
   // Render Sidebar and style depending on light/dark mode

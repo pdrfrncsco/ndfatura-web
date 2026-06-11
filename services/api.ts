@@ -94,6 +94,13 @@ export const ExchangeRateService = {
   }
 };
 
+export const TenantService = {
+  update: async (id: string, data: Partial<Tenant>): Promise<Tenant> => {
+    const response = await apiClient.patch<ApiEnvelope<Tenant>>(`/empresas/${id}/`, data);
+    return unwrap(response);
+  }
+};
+
 export const AuthService = {
   login: async (email: string, password: string): Promise<{ user: User; tenants: Tenant[]; token: string }> => {
     const response = await apiClient.post<ApiEnvelope<{ user: User; tenants: Tenant[]; access: string }>>('/auth/login/', { email, password });

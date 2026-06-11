@@ -1,12 +1,33 @@
 import { create } from 'zustand';
-import { Client, Product, Invoice, AuditLog, DashboardStats, Receipt } from '../types/invoice';
-import { AuditService, ClientService, DashboardService, InvoiceService, ProductService, ReceiptService } from '../services/api';
+import { 
+  Client, 
+  Product, 
+  Invoice, 
+  AuditLog, 
+  DashboardStats, 
+  Receipt, 
+  StockMovement,
+  Estabelecimento,
+  ExchangeRate
+} from '../types/invoice';
+import { 
+  AuditService, 
+  ClientService, 
+  DashboardService, 
+  InvoiceService, 
+  ProductService, 
+  ReceiptService,
+  EstabelecimentoService,
+  ExchangeRateService
+} from '../services/api';
 
 interface DataState {
   clients: Client[];
   products: Product[];
   invoices: Invoice[];
   receipts: Receipt[];
+  estabelecimentos: Estabelecimento[];
+  exchangeRates: ExchangeRate[];
   auditLogs: AuditLog[];
   dashboardStatsByTenant: Record<string, DashboardStats>;
   isLoadingRemoteData: boolean;
@@ -29,6 +50,15 @@ interface DataState {
   deleteProduct: (id: string) => Promise<void>;
   adjustStock: (productId: string, quantity: number, type: 'In' | 'Out', reason: string) => Promise<StockMovement>;
   fetchStockMovements: () => Promise<StockMovement[]>;
+
+  // Actions for Estabelecimentos
+  fetchEstabelecimentos: () => Promise<void>;
+  addEstabelecimento: (data: Omit<Estabelecimento, 'id'>) => Promise<Estabelecimento>;
+  updateEstabelecimento: (id: string, data: Partial<Estabelecimento>) => Promise<Estabelecimento>;
+  
+  // Actions for ExchangeRates
+  fetchExchangeRates: () => Promise<void>;
+  addExchangeRate: (data: Omit<ExchangeRate, 'id'>) => Promise<ExchangeRate>;
   
   // Actions for Invoices
   addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceHash' | 'qrcodeString'>) => Promise<Invoice>;
@@ -44,12 +74,6 @@ interface DataState {
   // Stats Calculator
   getDashboardStats: (tenantId: string) => DashboardStats;
 }
-
-// Initial Seeds
-const SEED_CLIENTS: Client[] = [];
-const SEED_PRODUCTS: Product[] = [];
-const SEED_INVOICES: Invoice[] = [];
-const SEED_AUDIT_LOGS: AuditLog[] = [];
 
 // Helper to load/save state
 const isBrowser = typeof window !== 'undefined';
@@ -71,11 +95,13 @@ const setStorageItem = <T>(key: string, data: T) => {
 };
 
 export const useDataStore = create<DataState>((set, get) => ({
-  clients: getStorageItem('ndf_clients', SEED_CLIENTS),
-  products: getStorageItem('ndf_products', SEED_PRODUCTS),
-  invoices: getStorageItem('ndf_invoices', SEED_INVOICES),
+  clients: getStorageItem('ndf_clients', []),
+  products: getStorageItem('ndf_products', []),
+  invoices: getStorageItem('ndf_invoices', []),
   receipts: getStorageItem('ndf_receipts', []),
-  auditLogs: getStorageItem('ndf_audit_logs', SEED_AUDIT_LOGS),
+  estabelecimentos: getStorageItem('ndf_estabelecimentos', []),
+  exchangeRates: getStorageItem('ndf_exchange_rates', []),
+  auditLogs: getStorageItem('ndf_audit_logs', []),
   dashboardStatsByTenant: {},
   isLoadingRemoteData: false,
   remoteDataError: null,
@@ -83,13 +109,15 @@ export const useDataStore = create<DataState>((set, get) => ({
   loadTenantData: async (tenantId) => {
     set({ isLoadingRemoteData: true, remoteDataError: null });
     try {
-      const [clients, products, invoices, receipts, auditLogs, dashboardStats] = await Promise.all([
+      const [clients, products, invoices, receipts, auditLogs, dashboardStats, estabelecimentos, exchangeRates] = await Promise.all([
         ClientService.getAll(),
         ProductService.getAll(),
         InvoiceService.getAll(),
         ReceiptService.getAll(),
         AuditService.getAll(),
-        DashboardService.getStats()
+        DashboardService.getStats(),
+        EstabelecimentoService.getAll(),
+        ExchangeRateService.getAll()
       ]);
 
       set((state) => ({
@@ -98,6 +126,8 @@ export const useDataStore = create<DataState>((set, get) => ({
         invoices,
         receipts,
         auditLogs,
+        estabelecimentos,
+        exchangeRates,
         dashboardStatsByTenant: {
           ...state.dashboardStatsByTenant,
           [tenantId]: dashboardStats
@@ -111,6 +141,8 @@ export const useDataStore = create<DataState>((set, get) => ({
       setStorageItem('ndf_invoices', invoices);
       setStorageItem('ndf_receipts', receipts);
       setStorageItem('ndf_audit_logs', auditLogs);
+      setStorageItem('ndf_estabelecimentos', estabelecimentos);
+      setStorageItem('ndf_exchange_rates', exchangeRates);
     } catch (error) {
       set({
         isLoadingRemoteData: false,
@@ -153,7 +185,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     set({ remoteDataError: null });
     try {
       const newClient = await ClientService.create(clientData);
-      const updated = [...get().clients.filter((client) => client.id !== newClient.id), newClient];
+      const updated = [...get().clients, newClient];
       set({ clients: updated });
       setStorageItem('ndf_clients', updated);
       return newClient;
@@ -194,7 +226,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     set({ remoteDataError: null });
     try {
       const newProduct = await ProductService.create(productData);
-      const updated = [...get().products.filter((product) => product.id !== newProduct.id), newProduct];
+      const updated = [...get().products, newProduct];
       set({ products: updated });
       setStorageItem('ndf_products', updated);
       return newProduct;
@@ -260,11 +292,47 @@ export const useDataStore = create<DataState>((set, get) => ({
     }
   },
 
+  fetchEstabelecimentos: async () => {
+    const data = await EstabelecimentoService.getAll();
+    set({ estabelecimentos: data });
+    setStorageItem('ndf_estabelecimentos', data);
+  },
+  
+  addEstabelecimento: async (data) => {
+    const newBranch = await EstabelecimentoService.create(data);
+    const updated = [...get().estabelecimentos, newBranch];
+    set({ estabelecimentos: updated });
+    setStorageItem('ndf_estabelecimentos', updated);
+    return newBranch;
+  },
+
+  updateEstabelecimento: async (id, data) => {
+    const serverBranch = await EstabelecimentoService.update(id, data);
+    const updated = get().estabelecimentos.map(b => b.id === id ? serverBranch : b);
+    set({ estabelecimentos: updated });
+    setStorageItem('ndf_estabelecimentos', updated);
+    return serverBranch;
+  },
+
+  fetchExchangeRates: async () => {
+    const data = await ExchangeRateService.getAll();
+    set({ exchangeRates: data });
+    setStorageItem('ndf_exchange_rates', data);
+  },
+  
+  addExchangeRate: async (data) => {
+    const newRate = await ExchangeRateService.create(data);
+    const updated = [...get().exchangeRates, newRate];
+    set({ exchangeRates: updated });
+    setStorageItem('ndf_exchange_rates', updated);
+    return newRate;
+  },
+
   addInvoice: async (invoiceData) => {
     set({ remoteDataError: null });
     try {
       const newInvoice = await InvoiceService.create(invoiceData);
-      const updated = [newInvoice, ...get().invoices.filter((invoice) => invoice.id !== newInvoice.id)];
+      const updated = [newInvoice, ...get().invoices];
       set({ invoices: updated });
       setStorageItem('ndf_invoices', updated);
       return newInvoice;
@@ -317,10 +385,9 @@ export const useDataStore = create<DataState>((set, get) => ({
     set({ remoteDataError: null });
     try {
       await InvoiceService.syncAGT(id);
-      // Actualizamos o estado local para pendente enquanto o worker processa
       const updated = get().invoices.map((i) => {
         if (i.id === id) {
-          return { ...i, status: 'Issued' as const }; // Mantemos Issued ou mudamos para algo indicativo
+          return { ...i, status: 'Issued' as const };
         }
         return i;
       });
@@ -330,7 +397,6 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw error;
     }
   },
-
 
   addAuditLog: (logData) => {
     const newLog: AuditLog = {
@@ -352,12 +418,9 @@ export const useDataStore = create<DataState>((set, get) => ({
   getDashboardStats: (tenantId) => {
     const remoteStats = get().dashboardStatsByTenant[tenantId];
     if (remoteStats) return remoteStats;
-
-    // Fallback or computed stats logic...
     return {
-      totalInvoiced: 0,
-      revenueCollected: 0,
-      taxesCollected: 0,
+      totalRevenue: 0,
+      ivaCollected: 0,
       withholdingCollected: 0,
       pendingAmount: 0,
       draftCount: 0,

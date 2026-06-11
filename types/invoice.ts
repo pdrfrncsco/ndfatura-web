@@ -17,6 +17,8 @@ export interface Tenant {
   country: string;
   fiscalRegime: string;
   logoUrl?: string;
+  systemName?: string;
+  primaryColor?: string;
   agtCertificateNo?: string;
 }
 

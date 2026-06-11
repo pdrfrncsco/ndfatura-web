@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { User, Tenant } from '../types/invoice';
-import { AuthService, hasAccessToken, setActiveTenantHeaders } from '../services/api';
+import { AuthService, TenantService, hasAccessToken, setActiveTenantHeaders } from '../services/api';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -17,7 +17,7 @@ interface AuthState {
   bootstrapSession: () => Promise<void>;
   logout: () => void;
   switchTenant: (tenantId: string) => void;
-  updateTenantProfile: (updated: Partial<Tenant>) => void;
+  updateTenantProfile: (updated: Partial<Tenant>) => Promise<void>;
   toggleTheme: () => void;
   setTheme: (theme: 'light' | 'dark') => void;
   setCurrentScreen: (screen: 'dashboard' | 'invoices' | 'payments' | 'clients' | 'products' | 'reports' | 'settings' | 'users' | 'audit_logs') => void;
@@ -96,16 +96,20 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
 
-  updateTenantProfile: (updated: Partial<Tenant>) => {
-    set((state) => {
-      if (!state.currentTenant) return {};
-      const newTenant = { ...state.currentTenant, ...updated };
-      const updatedTenants = state.tenants.map((t) => t.id === newTenant.id ? newTenant : t);
-      return {
-        currentTenant: newTenant,
-        tenants: updatedTenants
-      };
-    });
+  updateTenantProfile: async (updated: Partial<Tenant>) => {
+    const { currentTenant, tenants } = useAuthStore.getState();
+    if (!currentTenant) return;
+
+    try {
+        const serverTenant = await TenantService.update(currentTenant.id, updated);
+        set({
+            currentTenant: serverTenant,
+            tenants: tenants.map((t) => t.id === serverTenant.id ? serverTenant : t)
+        });
+    } catch (error) {
+        console.error('Error updating tenant profile:', error);
+        throw error;
+    }
   },
 
   toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
