@@ -4,55 +4,55 @@ import * as React from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
 import { getApiFieldErrors } from '../../services/api';
-import { canIssueOrCancelInvoice } from '../../lib/rbac';
-import { Client, Product, Invoice, InvoiceItem, InvoiceType, InvoiceStatus } from '../../types/invoice';
+import { canIssueInvoice, canCancelInvoice } from '../../lib/rbac';
+import { 
+  Invoice, 
+  InvoiceItem, 
+  InvoiceType, 
+  InvoiceStatus,
+  Estabelecimento,
+  ExchangeRate
+} from '../../types/invoice';
 import { 
   FileText, 
   Plus, 
   Search, 
   Filter, 
-  Calendar, 
-  User as UserIcon, 
-  Trash2, 
-  ChevronRight, 
-  Printer, 
+  FileCheck, 
   CheckCircle, 
   Clock, 
-  FileCheck, 
-  AlertTriangle, 
   X, 
+  Trash2, 
+  Printer, 
+  Share2, 
+  AlertCircle, 
+  FileSearch,
+  ChevronRight,
+  Calculator,
+  RefreshCcw,
+  Building,
+  DollarSign,
   ArrowLeft,
-  Settings,
-  QrCode,
-  Download,
-  AlertCircle
+  Calendar,
+  User as UserIcon,
+  Tag
 } from 'lucide-react';
 
-// Define helper outside component to satisfy strict reactivity lint rules
-function generateFaturaDates(invoiceType: string) {
-  const current = new Date();
-  const year = current.getFullYear();
-  const month = String(current.getMonth() + 1).padStart(2, '0');
-  const day = String(current.getDate()).padStart(2, '0');
-  
-  const todayStr = `${year}-${month}-${day}`;
-  
-  // Due date (+30 days)
-  const due = new Date(current.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const dueYear = due.getFullYear();
-  const dueMonth = String(due.getMonth() + 1).padStart(2, '0');
-  const dueDay = String(due.getDate()).padStart(2, '0');
-  const dueStr = `${dueYear}-${dueMonth}-${dueDay}`;
-  
-  return {
-    todayStr,
-    dueDateStr: invoiceType === 'FR' || invoiceType === 'VD' ? todayStr : dueStr
-  };
+function generateFaturaDates(type: InvoiceType) {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  const dueDate = new Date();
+  dueDate.setDate(today.getDate() + 30);
+  const dueDateStr = dueDate.toISOString().split('T')[0];
+  return { todayStr, dueDateStr };
 }
 
 export default function InvoiceModule() {
   const { currentTenant, theme, user, addNotification } = useAuthStore();
-  const { clients, products, invoices, addInvoice, issueInvoice, cancelInvoice, syncInvoiceWithAGT } = useDataStore();
+  const { 
+    clients, products, invoices, estabelecimentos, exchangeRates,
+    addInvoice, issueInvoice, cancelInvoice, syncInvoiceWithAGT 
+  } = useDataStore();
 
   const [viewState, setViewState] = React.useState<'list' | 'create' | 'view'>('list');
   const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null);
@@ -61,22 +61,23 @@ export default function InvoiceModule() {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<string>('ALL');
   const [typeFilter, setTypeFilter] = React.useState<string>('ALL');
+  const [branchFilter, setBranchFilter] = React.useState<string>('ALL');
   const [sortBy, setSortBy] = React.useState<'date' | 'total'>('date');
   const [currentPage, setCurrentPage] = React.useState(1);
-  const itemsPerPage = 6;
+  const itemsPerPage = 8;
 
   // Invoice Create States
+  const [selectedBranchId, setSelectedBranchId] = React.useState('');
   const [selectedClientId, setSelectedClientId] = React.useState('');
   const [invoiceType, setInvoiceType] = React.useState<InvoiceType>('FT');
-  const [invoiceStatus, setInvoiceStatus] = React.useState<'Draft' | 'Issued' | 'AGT_Synced'>('Draft');
+  const [currency, setCurrency] = React.useState('AOA');
+  const [exchangeRate, setExchangeRate] = React.useState(1);
   const [withholdingEnabled, setWithholdingEnabled] = React.useState(false);
   const [notes, setNotes] = React.useState('');
   const [originDocumentId, setOriginDocumentId] = React.useState('');
   const [rectificationReason, setRectificationReason] = React.useState('');
   const [isSavingDraft, setIsSavingDraft] = React.useState(false);
   const [isIssuing, setIsIssuing] = React.useState(false);
-  const [isCancelling, setIsCancelling] = React.useState(false);
-  const [isSyncingAgt, setIsSyncingAgt] = React.useState(false);
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
   const [invoiceItems, setInvoiceItems] = React.useState<Array<{
     productId: string;
@@ -85,54 +86,70 @@ export default function InvoiceModule() {
     price: number;
   }>>([{ productId: '', quantity: 1, discountPercent: 0, price: 0 }]);
 
-  // Reset states
+  // Auto-set branch
+  React.useEffect(() => {
+    if (estabelecimentos.length > 0 && !selectedBranchId) {
+        const sede = estabelecimentos.find(e => e.code === 'SEDE') || estabelecimentos[0];
+        setSelectedBranchId(sede.id);
+    }
+  }, [estabelecimentos, selectedBranchId]);
+
+  // Update rate
+  React.useEffect(() => {
+    if (currency === 'AOA') {
+        setExchangeRate(1);
+    } else {
+        const latestRate = exchangeRates
+            .filter(r => r.currencyCode === currency)
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        if (latestRate) setExchangeRate(latestRate.rate);
+    }
+  }, [currency, exchangeRates]);
+
   const resetForm = () => {
+    const sede = estabelecimentos.find(e => e.code === 'SEDE') || estabelecimentos[0];
+    setSelectedBranchId(sede?.id || '');
     setSelectedClientId('');
     setInvoiceType('FT');
-    setInvoiceStatus('Draft');
+    setCurrency('AOA');
+    setExchangeRate(1);
     setWithholdingEnabled(false);
     setNotes('');
     setOriginDocumentId('');
     setRectificationReason('');
     setInvoiceItems([{ productId: '', quantity: 1, discountPercent: 0, price: 0 }]);
+    setFormErrors({});
   };
 
   if (!currentTenant) return null;
 
   // ---------------------------------------------------------------------------
-  // 1. DATA COMPUTATION FOR INVOICE FORM
+  // DATA COMPUTATION
   // ---------------------------------------------------------------------------
   const tenantClients = clients.filter(c => c.tenantId === currentTenant.id);
   const tenantProducts = products.filter(p => p.tenantId === currentTenant.id);
   const tenantInvoices = invoices.filter(i => i.tenantId === currentTenant.id);
 
-  // Filter & sort invoices
   const filteredInvoices = tenantInvoices.filter(inv => {
-    const matchesSearch = inv.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          inv.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          inv.clientNif.includes(searchTerm);
+    const matchesSearch = (inv.invoiceNo?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
+                          (inv.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                          (inv.clientNif || '').includes(searchTerm);
     const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
     const matchesType = typeFilter === 'ALL' || inv.type === typeFilter;
-    return matchesSearch && matchesStatus && matchesType;
+    const matchesBranch = branchFilter === 'ALL' || inv.estabelecimentoId === branchFilter;
+    return matchesSearch && matchesStatus && matchesType && matchesBranch;
   }).sort((a, b) => {
-    if (sortBy === 'date') {
-      return new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime();
-    } else {
-      return b.grandTotal - a.grandTotal;
-    }
+    if (sortBy === 'date') return new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime();
+    return b.grandTotal - a.grandTotal;
   });
 
-  // Paginated invoices
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentInvoices = filteredInvoices.slice(indexOfFirstItem, indexOfLastItem);
+  const currentInvoices = filteredInvoices.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const totalPages = Math.ceil(filteredInvoices.length / itemsPerPage);
 
-  // Calculate live creation numbers
-  const calculatedItems: InvoiceItem[] = invoiceItems.map((itm, index) => {
+  const calculatedItems = invoiceItems.map((itm, index) => {
     const prod = tenantProducts.find(p => p.id === itm.productId);
     const price = itm.price || prod?.price || 0;
-    const qty = itm.quantity || 1;
+    const qty = itm.quantity || 0;
     const disc = itm.discountPercent || 0;
     const taxRate = prod?.taxRate || 0;
 
@@ -140,84 +157,55 @@ export default function InvoiceModule() {
     const discAmount = baseAmount * (disc / 100);
     const netAmount = baseAmount - discAmount;
     const taxAmount = netAmount * (taxRate / 100);
-    const grossTotal = netAmount + taxAmount;
 
     return {
-      id: `itm-new-${index}`,
       productId: itm.productId,
-      productName: prod?.name || 'Seleccione Produto...',
+      productName: prod?.name || '',
       quantity: qty,
       price: price,
       taxRate: taxRate,
       discount: disc,
       totalTax: taxAmount,
-      subtotal: netAmount,
-      total: grossTotal
+      subtotal: baseAmount,
+      total: netAmount + taxAmount
     };
   });
 
-  const liveSubtotal = calculatedItems.reduce((acc, i) => acc + (i.price * i.quantity), 0);
-  const liveDiscountTotal = calculatedItems.reduce((acc, i) => acc + (i.price * i.quantity * (i.discount / 100)), 0);
-  const netBeforeTax = liveSubtotal - liveDiscountTotal;
-  const liveTaxTotal = calculatedItems.reduce((acc, i) => acc + i.totalTax, 0);
-  const liveWithholding = withholdingEnabled ? netBeforeTax * 0.065 : 0;
-  const liveGrandTotal = netBeforeTax + liveTaxTotal - liveWithholding;
+  const liveSubtotal = calculatedItems.reduce((acc, cur) => acc + cur.subtotal, 0);
+  const liveDiscountTotal = calculatedItems.reduce((acc, cur) => acc + (cur.price * cur.quantity * (cur.discount / 100)), 0);
+  const liveTaxTotal = calculatedItems.reduce((acc, cur) => acc + cur.totalTax, 0);
+  const liveWithholding = withholdingEnabled ? (liveSubtotal - liveDiscountTotal) * 0.065 : 0;
+  const liveGrandTotal = (liveSubtotal - liveDiscountTotal) + liveTaxTotal - liveWithholding;
 
   // ---------------------------------------------------------------------------
-  // 2. FORM ACTIONS & MUTATIONS
+  // HANDLERS
   // ---------------------------------------------------------------------------
-  const handleAddLineItem = () => {
-    setInvoiceItems([...invoiceItems, { productId: '', quantity: 1, discountPercent: 0, price: 0 }]);
-  };
-
-  const handleRemoveLineItem = (index: number) => {
+  const handleAddLine = () => setInvoiceItems([...invoiceItems, { productId: '', quantity: 1, discountPercent: 0, price: 0 }]);
+  const handleRemoveLine = (idx: number) => {
     if (invoiceItems.length === 1) return;
-    setInvoiceItems(invoiceItems.filter((_, idx) => idx !== index));
+    setInvoiceItems(invoiceItems.filter((_, i) => i !== idx));
   };
-
-  const handleLineItemChange = (index: number, key: 'productId' | 'quantity' | 'discountPercent' | 'price', value: any) => {
+  const handleItemChange = (idx: number, field: string, value: any) => {
     const updated = [...invoiceItems];
-    updated[index] = {
-      ...updated[index],
-      [key]: value
-    };
-    
-    // Auto-populate price if base product changes
-    if (key === 'productId') {
-      const prod = tenantProducts.find(p => p.id === value);
-      if (prod) {
-        updated[index].price = prod.price;
-      }
-    }
+    updated[idx] = { ...updated[idx], [field]: value };
     setInvoiceItems(updated);
   };
 
-  const handeSubmitInvoice = async (e: React.FormEvent) => {
+  const handleSaveInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormErrors({});
+
     if (!selectedClientId) {
-       setFormErrors({ clientId: 'Seleccione um cliente para facturar.' });
-       return;
+        setFormErrors({ client: 'Seleccione um cliente obrigatório.' });
+        return;
     }
     const client = tenantClients.find(c => c.id === selectedClientId);
     if (!client) return;
 
-    // Validate lines
     const validLines = calculatedItems.filter(item => item.productId !== '');
     if (validLines.length === 0) {
-      setFormErrors({ items: 'Adicione pelo menos um produto com codigo valido.' });
-      return;
-    }
-
-    if (invoiceType === 'NC') {
-      if (!originDocumentId) {
-        setFormErrors({ items: 'Seleccione a factura original para a Nota de Crédito.' });
+        setFormErrors({ items: 'A factura deve conter pelo menos um item.' });
         return;
-      }
-      if (!rectificationReason) {
-        setFormErrors({ items: 'Indique o motivo da rectificação.' });
-        return;
-      }
     }
 
     const { todayStr, dueDateStr } = generateFaturaDates(invoiceType);
@@ -226,55 +214,51 @@ export default function InvoiceModule() {
     try {
       const payload: any = {
         type: invoiceType,
-        status: 'Draft',
+        estabelecimentoId: selectedBranchId,
+        currency: currency,
+        exchangeRate: exchangeRate,
         issueDate: todayStr,
         dueDate: dueDateStr,
         clientId: client.id,
-        clientName: client.name,
-        clientNif: client.nif,
-        clientAddress: `${client.address}, ${client.city}`,
-        items: validLines,
-        subtotal: liveSubtotal,
-        discountTotal: liveDiscountTotal,
-        taxTotal: liveTaxTotal,
+        items: validLines.map(l => ({
+            productId: l.productId,
+            quantity: l.quantity,
+            price: l.price,
+            discount: l.discount
+        })),
         withholdingTaxRate: withholdingEnabled ? 6.5 : 0,
-        withholdingTaxAmount: liveWithholding,
-        grandTotal: liveGrandTotal,
-        notes: notes || (withholdingEnabled ? 'Documento sujeito a Retenção na Fonte de 6.5% de IRT.' : undefined),
-        tenantId: currentTenant.id,
-        createdBy: user?.name || 'Equipa NDFATURA'
+        notes,
+        originDocumentId: originDocumentId || undefined,
+        rectificationReason: rectificationReason || undefined
       };
 
-      if (invoiceType === 'NC') {
-        payload.originDocumentId = originDocumentId;
-        payload.rectificationReason = rectificationReason;
-      }
-
       const result = await addInvoice(payload);
-
-      addNotification({
-        title: 'Rascunho de factura criado',
-        desc: 'O rascunho foi calculado e registado pela API.',
-        type: 'info'
-      });
-
+      addNotification({ title: 'Rascunho Gravado', desc: 'Rascunho preparado para emissão fiscal.', type: 'info' });
       resetForm();
       setSelectedInvoice(result);
       setViewState('view');
     } catch (error) {
       const apiErrors = getApiFieldErrors(error);
-      if (Object.keys(apiErrors).length > 0) {
-        const firstError = Object.values(apiErrors)[0];
-        setFormErrors({ ...apiErrors, global: firstError });
-      } else {
-        setFormErrors({ global: error instanceof Error ? error.message : 'Falha ao criar rascunho.' });
-      }
+      setFormErrors(apiErrors.global ? apiErrors : { global: error instanceof Error ? error.message : 'Falha na comunicação' });
     } finally {
       setIsSavingDraft(false);
     }
   };
 
-  // Status badges mapping
+  const handleIssueInvoice = async (id: string) => {
+    if (!confirm('Deseja emitir este documento? Esta acção é irreversível e gerará um hash fiscal AGT.')) return;
+    setIsIssuing(true);
+    try {
+      const result = await issueInvoice(id);
+      setSelectedInvoice(result);
+      addNotification({ title: 'Factura Emitida', desc: 'Documento assinado digitalmente (RS256).', type: 'success' });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro na emissão');
+    } finally {
+      setIsIssuing(false);
+    }
+  };
+
   const renderStatusBadge = (status: InvoiceStatus) => {
     const configs: Record<string, { bg: string, label: string }> = {
       Draft: { bg: 'bg-slate-500/10 text-slate-400 border-slate-500/20', label: 'Rascunho' },
@@ -285,7 +269,7 @@ export default function InvoiceModule() {
       AGT_Synced: { bg: 'bg-indigo-500/10 text-blue-400 border-indigo-500/20', label: 'Certificado AGT' },
       AGT_Error: { bg: 'bg-amber-500/10 text-amber-500 border-amber-500/20', label: 'Erro Sinc' },
     };
-    const c = configs[status as string] || configs.Draft;
+    const c = configs[status] || configs.Draft;
     return (
       <span className={`px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${c.bg}`}>
         {c.label}
@@ -296,1003 +280,201 @@ export default function InvoiceModule() {
   return (
     <div className="space-y-6">
       
-      {/* 1. SEED LIST VIEW MODE */}
+      {/* 1. LIST VIEW */}
       {viewState === 'list' && (
-        <div className="space-y-5">
-          {/* Header row */}
+        <div className="space-y-5 animate-in fade-in duration-300">
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
             <div>
-              <h1 className="text-xl sm:text-2xl font-sans font-bold tracking-tight flex items-center gap-2">
-                <FileText className="h-6 w-6 text-blue-500" />
-                Facturação Emitida
-              </h1>
-              <p className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'} mt-0.5`}>
-                Gestão, consulta e transmissão em tempo real para o portal fiscal da AGT Angola.
-              </p>
+                <h1 className="text-2xl font-bold flex items-center gap-2 tracking-tight text-slate-800 dark:text-white">
+                    <FileText className="h-7 w-7 text-blue-500" /> 
+                    Documentos de Facturação
+                </h1>
+                <p className="text-xs text-slate-500">Gestão e transmissão de facturas para a AGT.</p>
             </div>
-            
-            <button
-              id="btn-new-invoice-wizard"
-              onClick={() => {
-                resetForm();
-                setViewState('create');
-              }}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all"
+            <button 
+                onClick={() => { resetForm(); setViewState('create'); }} 
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
             >
-              <Plus className="h-4.5 w-4.5" />
-              <span>Processar Factura</span>
+              <Plus className="h-5 w-5" /> Nova Factura
             </button>
           </div>
 
-          {/* Quick Stats Summary panels for invoices specifically */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/35 border-slate-900' : 'bg-slate-50 border-slate-200'} flex items-center gap-3`}>
-              <div className="h-9 w-9 bg-blue-500/10 text-blue-500 rounded-lg flex items-center justify-center">
-                <FileCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 font-mono block">TOTAL DOCUMENTOS</span>
-                <span className="text-sm font-bold font-mono">{tenantInvoices.length} Registados</span>
-              </div>
+          {/* Search Bar */}
+          <div className={`p-4 rounded-2xl border flex flex-wrap gap-4 items-center ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+            <div className="relative flex-1 min-w-[280px]">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input 
+                    placeholder="Pesquisar por número, cliente ou NIF..." 
+                    value={searchTerm} 
+                    onChange={e => setSearchTerm(e.target.value)} 
+                    className={`w-full pl-10 pr-4 py-2 border rounded-xl text-xs ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200'}`} 
+                />
             </div>
-            <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/35 border-slate-900' : 'bg-slate-50 border-slate-200'} flex items-center gap-3`}>
-              <div className="h-9 w-9 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center">
-                <CheckCircle className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 font-mono block">SINCRONIZADO AGT</span>
-                <span className="text-sm font-bold font-mono text-blue-400">{tenantInvoices.filter(i => i.status === 'AGT_Synced').length} Assinados</span>
-              </div>
-            </div>
-            <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/35 border-slate-900' : 'bg-slate-50 border-slate-200'} flex items-center gap-3`}>
-              <div className="h-9 w-9 bg-amber-500/10 text-amber-500 rounded-lg flex items-center justify-center">
-                <Clock className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 font-mono block">RESCUNHOS PENDENTES</span>
-                <span className="text-sm font-bold font-mono text-slate-400">{tenantInvoices.filter(i => i.status === 'Draft').length} Rascunhos</span>
-              </div>
+            
+            <div className="flex gap-2">
+                <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className={`p-2 border rounded-xl text-xs font-bold ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-slate-50'}`}>
+                    <option value="ALL">Todas as Filiais</option>
+                    {estabelecimentos.map(b => <option key={b.id} value={b.id}>{b.code}</option>)}
+                </select>
+                <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className={`p-2 border rounded-xl text-xs font-bold ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-slate-50'}`}>
+                    <option value="ALL">Todos os Tipos</option>
+                    <option value="FT">FT</option>
+                    <option value="FR">FR</option>
+                    <option value="NC">NC</option>
+                </select>
             </div>
           </div>
 
-          {/* Filters and Searching bar */}
-          <div className={`p-4 rounded-xl border ${
-            theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'
-          } flex flex-col md:flex-row gap-3 items-center justify-between`}>
-            {/* Search Input */}
-            <div className="relative w-full md:w-80">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-              <input
-                id="search-invoices-input"
-                type="text"
-                placeholder="Pesquisar por N.º, Cliente ou NIF..."
-                value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                className={`w-full pl-9 pr-4 py-2 text-xs rounded-lg border ${
-                  theme === 'dark' 
-                    ? 'bg-slate-900 border-slate-800 text-slate-200 focus:border-blue-500' 
-                    : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-blue-600'
-                } focus:outline-none transition-colors`}
-              />
-            </div>
-
-            {/* Selector group */}
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-              <div className="flex items-center gap-1.5">
-                <Filter className="h-3.5 w-3.5 text-slate-500 shrink-0" />
-                <span className="text-[10px] text-slate-500 font-semibold uppercase">Tipo:</span>
-                <select
-                  id="filter-type-select"
-                  value={typeFilter}
-                  onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }}
-                  className={`text-[11px] font-semibold border rounded-lg p-1.5 ${
-                    theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                  }`}
-                >
-                  <option value="ALL">Todos</option>
-                  <option value="FT">Fatura (FT)</option>
-                  <option value="FR">Fatura-Recibo (FR)</option>
-                  <option value="VD">Venda a Dinheiro (VD)</option>
-                  <option value="NC">Nota de Crédito (NC)</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-slate-500 font-semibold uppercase">Estado:</span>
-                <select
-                  id="filter-status-select"
-                  value={statusFilter}
-                  onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-                  className={`text-[11px] font-semibold border rounded-lg p-1.5 ${
-                    theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                  }`}
-                >
-                  <option value="ALL">Todos os estados</option>
-                  <option value="Draft">Rascunhos</option>
-                  <option value="Issued">Não Sincronizados</option>
-                  <option value="Paid">Liquidados</option>
-                  <option value="AGT_Synced">Simulado Sinc. AGT</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <select
-                  id="sort-invoices-select"
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className={`text-[11px] font-semibold border rounded-lg p-1.5 ${
-                    theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                  }`}
-                >
-                  <option value="date">Ordenar por Data</option>
-                  <option value="total">Ordenar por Valor</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Table list grid */}
-          <div className={`border rounded-xl spill-table overflow-hidden ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-400">
-                <thead>
-                  <tr className={`border-b ${theme === 'dark' ? 'border-slate-900 bg-slate-900/30 text-slate-400' : 'border-slate-200 bg-slate-50 text-slate-500'} font-semibold`}>
-                    <th className="p-3.5">Número de Factura</th>
-                    <th className="p-3.5">Data de Emissão</th>
-                    <th className="p-3.5">Cliente</th>
-                    <th className="p-3.5">NIF Adquirente</th>
-                    <th className="p-3.5 text-right">Valor Total (Kwanza)</th>
-                    <th className="p-3.5 text-center">Estado Fiscal</th>
-                    <th className="p-3.5 text-center">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentInvoices.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="text-center py-12">
-                        <div className="flex flex-col items-center justify-center text-slate-500">
-                          <FileText className="h-10 w-10 mb-2.5 opacity-40 text-blue-500" />
-                          <p className="font-semibold text-sm">Nenhum documento encontrado</p>
-                          <p className="text-[11px] mt-0.5 max-w-xs px-4">Tente atenuar ou retirar os filtros de pesquisa para visualizar facturas.</p>
-                        </div>
-                      </td>
+          {/* Table */}
+          <div className={`border rounded-2xl overflow-hidden shadow-sm ${theme === 'dark' ? 'border-slate-900' : 'border-slate-200'}`}>
+            <table className="w-full text-left text-xs">
+                <thead className={theme === 'dark' ? 'bg-slate-900/60' : 'bg-slate-50/80'}>
+                    <tr className="uppercase text-[10px] font-black text-slate-500 tracking-widest">
+                        <th className="p-4">Número</th>
+                        <th className="p-4">Data</th>
+                        <th className="p-4 text-right">Valor Total</th>
+                        <th className="p-4 text-center">Estado</th>
+                        <th className="p-4 text-right"></th>
                     </tr>
-                  ) : (
-                    currentInvoices.map((inv) => (
-                      <tr 
-                        key={inv.id} 
-                        className={`border-b ${theme === 'dark' ? 'border-slate-900' : 'border-slate-100'} hover:bg-slate-500/5 last:border-0`}
-                      >
-                        <td className="p-3.5 font-bold font-mono text-slate-800 dark:text-slate-100">{inv.invoiceNo}</td>
-                        <td className="p-3.5 text-slate-500">{inv.issueDate}</td>
-                        <td className="p-3.5 font-semibold text-slate-700 dark:text-slate-300 truncate max-w-xxs">{inv.clientName}</td>
-                        <td className="p-3.5 font-mono text-[11px] text-slate-500">{inv.clientNif}</td>
-                        <td className="p-3.5 text-right font-bold text-slate-800 dark:text-slate-100 font-mono">
-                          {inv.grandTotal.toLocaleString('pt-PT')} AOA
-                        </td>
-                        <td className="p-3.5 text-center">{renderStatusBadge(inv.status)}</td>
-                        <td className="p-3.5">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              id={`btn-view-invoice-${inv.id}`}
-                              onClick={() => {
-                                setSelectedInvoice(inv);
-                                setViewState('view');
-                              }}
-                              className={`p-1 px-2.5 rounded text-[11px] font-semibold flex items-center gap-1 transition-all ${
-                                theme === 'dark' 
-                                  ? 'bg-slate-900 hover:bg-slate-800 text-blue-400' 
-                                  : 'bg-slate-100 hover:bg-slate-200 text-blue-700'
-                              }`}
-                            >
-                              <span>Visualizar</span>
-                              <ChevronRight className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                </thead>
+                <tbody className="divide-y divide-slate-800/10 dark:divide-slate-800/50">
+                    {currentInvoices.length === 0 ? (
+                        <tr><td colSpan={5} className="p-16 text-center text-slate-400 italic">Sem documentos.</td></tr>
+                    ) : currentInvoices.map(inv => (
+                        <tr key={inv.id} onClick={() => { setSelectedInvoice(inv); setViewState('view'); }} className="hover:bg-blue-500/5 cursor-pointer">
+                            <td className="p-4 font-mono font-bold text-blue-500">{inv.invoiceNo}</td>
+                            <td className="p-4 text-slate-500">{inv.issueDate}</td>
+                            <td className="p-4 font-mono font-black text-right">{inv.grandTotal.toLocaleString('pt-PT')} {inv.currency}</td>
+                            <td className="p-4 text-center">{renderStatusBadge(inv.status)}</td>
+                            <td className="p-4 text-right"><ChevronRight className="h-4 w-4 text-slate-400" /></td>
+                        </tr>
+                    ))}
                 </tbody>
-              </table>
-            </div>
-
-            {/* Pagination controls */}
-            {totalPages > 1 && (
-              <div className={`p-4 border-t ${theme === 'dark' ? 'border-slate-900' : 'border-slate-200'} flex items-center justify-between`}>
-                <span className="text-[11px] text-slate-500">
-                  A mostrar página <strong className="font-bold">{currentPage}</strong> de {totalPages} ({filteredInvoices.length} facturas)
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    id="btn-invoice-page-prev"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    className="p-1 px-2 text-[10px] font-bold tracking-tight rounded bg-slate-100 dark:bg-slate-900 disabled:opacity-40"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    id="btn-invoice-page-next"
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    className="p-1 px-2 text-[10px] font-bold tracking-tight rounded bg-slate-100 dark:bg-slate-900 disabled:opacity-40"
-                  >
-                    Próxima
-                  </button>
-                </div>
-              </div>
-            )}
+            </table>
           </div>
         </div>
       )}
 
-      {/* 2. INVOICE CREATION FLOW */}
+      {/* 2. CREATE VIEW */}
       {viewState === 'create' && (
-        <form onSubmit={handeSubmitInvoice} className="space-y-6">
-          {/* Header Action layout */}
-          <div className="flex justify-between items-center pb-4 border-b border-slate-900/10 dark:border-slate-800/40">
-            <div className="flex items-center gap-3">
-              <button
-                id="btn-cancel-create-invoice"
-                type="button"
-                onClick={() => setViewState('list')}
-                className={`p-1.5 rounded-lg border ${theme === 'dark' ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-slate-600'}`}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-              <div>
-                <h1 className="text-lg font-bold">Criar Rascunho de Factura</h1>
-                <p className="text-[11px] text-slate-500 mt-0.5">O backend calcula totais, impostos e valida cliente/produtos antes da emissão fiscal.</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                id="btn-save-invoice-draft"
-                type="submit"
-                disabled={isSavingDraft}
-                className={`px-4 py-2 border rounded-lg text-xs font-semibold ${
-                  theme === 'dark' ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-200' : 'bg-slate-100 hover:bg-slate-205 border-slate-200 text-slate-700'
-                }`}
-              >
-                {isSavingDraft ? 'A gravar...' : 'Gravar Rascunho'}
-              </button>
-              <button
-                id="btn-issue-sync-invoice"
-                type="button"
-                disabled
-                className="px-4 py-2 bg-slate-500/40 text-white/70 text-xs font-semibold rounded-lg shadow-sm cursor-not-allowed"
-                title="A emissão fiscal será implementada depois do fluxo de rascunho."
-              >
-                Emitir e Sincronizar AGT
-              </button>
-            </div>
+        <div className="space-y-6 animate-in slide-in-from-right-4">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setViewState('list')} className="p-2 bg-slate-500/10 rounded-xl"><ArrowLeft className="h-5 w-5" /></button>
+            <h2 className="text-xl font-bold">Nova Emissão</h2>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Form core columns */}
-            <div className="lg:col-span-2 space-y-5">
-              
-              {/* Client & type selectors */}
-              <div className={`p-5 rounded-xl border ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'} space-y-4`}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Dados do Documento e Adquirente</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Select Client */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-500 block">Cliente (Adquirente do Serviço) *</label>
-                    <select
-                      id="select-invoice-client"
-                      required
-                      value={selectedClientId}
-                      onChange={(e) => setSelectedClientId(e.target.value)}
-                      className={`w-full text-xs border rounded-lg p-2 ${
-                        theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                      }`}
-                    >
-                      <option value="">-- Seleccione Cliente --</option>
-                      {tenantClients.map(c => (
-                        <option key={c.id} value={c.id}>{c.name} (NIF: {c.nif})</option>
-                      ))}
+          <form onSubmit={handleSaveInvoice} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className={`lg:col-span-2 p-8 rounded-3xl border space-y-8 ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+                <div className="grid grid-cols-2 gap-4">
+                    <select value={selectedBranchId} onChange={e => setSelectedBranchId(e.target.value)} className="p-3 border rounded-2xl text-xs font-bold">
+                        {estabelecimentos.map(b => <option key={b.id} value={b.id}>{b.code} - {b.name}</option>)}
                     </select>
-                    {formErrors.clientId && <p className="text-[10px] text-red-500 font-mono mt-0.5">{formErrors.clientId}</p>}
-                  </div>
-
-                  {/* Document Type */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-500 block">Tipo de Documento Fiscal *</label>
-                    <select
-                      id="select-invoice-type"
-                      value={invoiceType}
-                      onChange={(e) => setInvoiceType(e.target.value as any)}
-                      className={`w-full text-xs border rounded-lg p-2 ${
-                        theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                      }`}
-                    >
-                      <option value="FT">Fatura (FT - Pagamento Diferido)</option>
-                      <option value="FR">Fatura-Recibo (FR - Pronto Pagamento)</option>
-                      <option value="VD">Venda a Dinheiro (VD - Dinheiro Caixa)</option>
-                      <option value="NC">Nota de Crédito (NC - Rectificação)</option>
+                    <select value={currency} onChange={e => setCurrency(e.target.value)} className="p-3 border rounded-2xl text-xs font-bold">
+                        <option value="AOA">Kwanza (AOA)</option>
+                        <option value="USD">Dólar (USD)</option>
                     </select>
-                  </div>
                 </div>
 
-                {invoiceType === 'NC' && selectedClientId && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-slate-500 block">Factura Original *</label>
-                      <select
-                        required
-                        value={originDocumentId}
-                        onChange={(e) => setOriginDocumentId(e.target.value)}
-                        className={`w-full text-xs border rounded-lg p-2 ${
-                          theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                        }`}
-                      >
-                        <option value="">-- Seleccione Factura --</option>
-                        {tenantInvoices
-                          .filter(i => i.clientId === selectedClientId && ['Issued', 'Paid', 'Partial', 'AGT_Synced'].includes(i.status) && i.type !== 'NC')
-                          .map(i => (
-                            <option key={i.id} value={i.id}>{i.invoiceNo} - {i.grandTotal.toLocaleString('pt-PT')} AOA</option>
-                        ))}
-                      </select>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+                    <select value={invoiceType} onChange={e => setInvoiceType(e.target.value as InvoiceType)} className="md:col-span-4 p-3 border rounded-2xl text-xs font-bold">
+                        <option value="FT">Factura (FT)</option>
+                        <option value="FR">Factura-Recibo (FR)</option>
+                        <option value="NC">Nota de Crédito (NC)</option>
+                    </select>
+                    <select value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)} className="md:col-span-8 p-3 border rounded-2xl text-xs font-bold">
+                        <option value="">Seleccione Cliente...</option>
+                        {tenantClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                </div>
+
+                <div className="space-y-4">
+                    <div className="flex justify-between border-b pb-2">
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase">Itens</h3>
+                        <button type="button" onClick={handleAddLine} className="text-blue-500 font-bold text-xs">+ Adicionar</button>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-slate-500 block">Motivo da Rectificação *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ex: Devolução, Anulação, Erro de emissão..."
-                        value={rectificationReason}
-                        onChange={(e) => setRectificationReason(e.target.value)}
-                        className={`w-full text-xs border rounded-lg p-2 ${
-                          theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                        }`}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Line Items builder */}
-              <div className={`p-5 rounded-xl border ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'} space-y-4`}>
-                <div className="flex justify-between items-center border-b border-slate-900/10 dark:border-slate-800/40 pb-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Linhas de Bens ou Serviços</h3>
-                  <button
-                    id="btn-invoice-add-item-row"
-                    type="button"
-                    onClick={handleAddLineItem}
-                    className="text-[11px] font-bold text-blue-500 hover:text-blue-600 flex items-center gap-1"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Adicionar Linha</span>
-                  </button>
+                    {invoiceItems.map((item, idx) => (
+                        <div key={idx} className="grid grid-cols-12 gap-4 items-center">
+                            <select value={item.productId} onChange={e => handleItemChange(idx, 'productId', e.target.value)} className="col-span-6 p-2.5 border rounded-xl text-xs font-bold">
+                                <option value="">Escolher Produto...</option>
+                                {tenantProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                            <input type="number" placeholder="Qtd" value={item.quantity} onChange={e => handleItemChange(idx, 'quantity', Number(e.target.value))} className="col-span-2 p-2.5 border rounded-xl text-xs font-mono" />
+                            <input type="number" placeholder="Preço" value={item.price || 0} onChange={e => handleItemChange(idx, 'price', Number(e.target.value))} className="col-span-3 p-2.5 border rounded-xl text-xs font-mono" />
+                            <button type="button" onClick={() => handleRemoveLine(idx)} className="col-span-1 text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                    ))}
                 </div>
 
-                <div className="space-y-3.5">
-                  {invoiceItems.map((itm, idx) => {
-                    const selectedProdObj = tenantProducts.find(p => p.id === itm.productId);
-                    return (
-                      <div key={idx} className="flex flex-col md:flex-row gap-3 items-end border-b border-slate-900/5 dark:border-slate-900/40 pb-3 last:border-0 last:pb-0">
-                        {/* Selected Product */}
-                        <div className="flex-1 space-y-1 w-full">
-                          <label className="text-[10px] text-slate-500 font-medium">Produto / Serviço</label>
-                          <select
-                            id={`line-product-${idx}`}
-                            value={itm.productId}
-                            required
-                            onChange={(e) => handleLineItemChange(idx, 'productId', e.target.value)}
-                            className={`w-full text-xs border rounded-lg p-2 ${
-                              theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                            }`}
-                          >
-                            <option value="">-- Seleccione Artigo --</option>
-                            {tenantProducts.map(p => (
-                              <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Custom Price */}
-                        <div className="w-full md:w-32 space-y-1">
-                          <label className="text-[10px] text-slate-500 font-medium">Preço (AOA)</label>
-                          <input
-                            id={`line-price-${idx}`}
-                            type="number"
-                            min="0"
-                            placeholder="Preço"
-                            value={itm.price || ''}
-                            onChange={(e) => handleLineItemChange(idx, 'price', Number(e.target.value))}
-                            className={`w-full text-xs border rounded-lg p-2 font-mono ${
-                              theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                            }`}
-                          />
-                        </div>
-
-                        {/* Custom Qty */}
-                        <div className="w-full md:w-20 space-y-1">
-                          <label className="text-[10px] text-slate-500 font-medium font-sans">Quant.</label>
-                          <input
-                            id={`line-qty-${idx}`}
-                            type="number"
-                            min="1"
-                            value={itm.quantity}
-                            onChange={(e) => handleLineItemChange(idx, 'quantity', Number(e.target.value))}
-                            className={`w-full text-xs border rounded-lg p-2 font-mono ${
-                              theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                            }`}
-                          />
-                        </div>
-
-                        {/* Discount */}
-                        <div className="w-full md:w-20 space-y-1">
-                          <label className="text-[10px] text-slate-500 font-medium">Desc (%)</label>
-                          <input
-                            id={`line-disc-${idx}`}
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={itm.discountPercent}
-                            onChange={(e) => handleLineItemChange(idx, 'discountPercent', Number(e.target.value))}
-                            className={`w-full text-xs border rounded-lg p-2 font-mono ${
-                              theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                            }`}
-                          />
-                        </div>
-
-                        {/* IVA / Tax Indicator */}
-                        {selectedProdObj && (
-                          <div className="w-full md:w-24 text-center mt-1 text-[11px] md:mb-2 text-slate-400">
-                            <span className="font-mono bg-blue-500/10 px-2 py-1.5 text-blue-500 rounded font-bold block scale-90">
-                              IVA: {selectedProdObj.taxRate}% 
-                            </span>
-                            {selectedProdObj.taxRate === 0 && (
-                              <span className="text-[8px] font-mono text-amber-500 block mt-0.5">Exempt. {selectedProdObj.exemptionCode}</span>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Delete trigger */}
-                        {invoiceItems.length > 1 && (
-                          <button
-                            id={`btn-remove-line-${idx}`}
-                            type="button"
-                            onClick={() => handleRemoveLineItem(idx)}
-                            className="p-2 mb-0.5 rounded-lg text-red-500 hover:bg-red-500/15"
-                            title="Remover Linha"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="pt-6 border-t flex justify-end">
+                    <button type="submit" disabled={isSavingDraft} className="px-10 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl hover:bg-blue-700 active:scale-95 transition-all">
+                        {isSavingDraft ? 'A processar...' : 'Gravar Rascunho'}
+                    </button>
                 </div>
-                {formErrors.items && <p className="text-[10px] text-red-500 font-mono mt-0.5">{formErrors.items}</p>}
-              </div>
-
-              {/* Notes block */}
-              <div className={`p-5 rounded-xl border ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'} space-y-3`}>
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">Observações do Documento</label>
-                <textarea
-                  id="invoice-notes-textarea"
-                  rows={2}
-                  placeholder="Instruções de pagamento alternitivas, NIBs bancários, ou notas de isenção..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className={`w-full text-xs border rounded-lg p-3 ${
-                    theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
-                  } focus:outline-none`}
-                />
-              </div>
-
             </div>
 
-            {/* Billing Right Calculator breakdown */}
-            <div className="space-y-5 col-span-1">
-              <div className={`p-5 rounded-xl border ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'} space-y-4`}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Sumário da Liquidação (AOA)</h3>
-                
-                {/* 6.5% Withholding (Retenção) toggle */}
-                <div className={`p-3 rounded-lg border ${
-                  theme === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'
-                } flex items-center justify-between`}>
-                  <div className="shrink-1.5 pr-2">
-                    <span className="text-[10.5px] font-semibold block leading-tight">Sujeito a Retenção na Fonte</span>
-                    <span className="text-[9px] text-slate-500 mt-0.5 block">Dedução de 6.5% de IRT em Serviços</span>
-                  </div>
-                  <input
-                    id="checkbox-retencao-fonte"
-                    type="checkbox"
-                    checked={withholdingEnabled}
-                    onChange={(e) => setWithholdingEnabled(e.target.checked)}
-                    className="h-4 w-4 accent-blue-500 shrink-0"
-                  />
-                </div>
-
-                <div className="space-y-2.5 text-xs text-slate-400 pt-2 border-t border-slate-900/10 dark:border-slate-900/45">
-                  <div className="flex justify-between">
-                    <span>Subtotal Ilíquido:</span>
-                    <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">{liveSubtotal.toLocaleString('pt-PT')} AOA</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Desconto Financeiro:</span>
-                    <span className="font-mono text-red-500">-{liveDiscountTotal.toLocaleString('pt-PT')} AOA</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Incidência Liquida:</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-200">{netBeforeTax.toLocaleString('pt-PT')} AOA</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>IVA Colectado:</span>
-                    <span className="font-mono text-slate-705 dark:text-slate-250">{liveTaxTotal.toLocaleString('pt-PT')} AOA</span>
-                  </div>
-
-                  {withholdingEnabled && (
-                    <div className="flex justify-between text-yellow-500 font-semibold bg-yellow-500/5 px-2 py-1 rounded">
-                      <span>Retenção (6.5%):</span>
-                      <span className="font-mono">-{liveWithholding.toLocaleString('pt-PT')} AOA</span>
+            <div className={`p-8 rounded-3xl border h-fit space-y-6 ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+                <h3 className="font-black text-xs text-slate-400 border-b pb-4">Resumo</h3>
+                <div className="space-y-4 font-mono">
+                    <div className="flex justify-between text-xl font-black text-blue-500">
+                        <span>TOTAL</span>
+                        <span>{liveGrandTotal.toLocaleString('pt-PT')} {currency}</span>
                     </div>
-                  )}
-
-                  <div className={`flex justify-between items-baseline pt-4 border-t font-sans font-bold text-sm ${
-                    theme === 'dark' ? 'border-slate-900 text-white' : 'border-slate-200 text-slate-950'
-                  }`}>
-                    <span>VALOR PAYÁVEL:</span>
-                    <span className="text-base font-bold font-mono text-blue-500">{liveGrandTotal.toLocaleString('pt-PT')} AOA</span>
-                  </div>
                 </div>
-              </div>
-
-              {formErrors.global && (
-                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-semibold text-red-400">
-                  {formErrors.global}
-                </div>
-              )}
-
-              {/* Compliance note card */}
-              <div className={`p-4 rounded-xl border border-blue-500/15 ${
-                theme === 'dark' ? 'bg-blue-500/5' : 'bg-blue-50/50'
-              } flex gap-2.5 items-start text-xs`}>
-                <AlertCircle className="h-4.5 w-4.5 text-blue-500 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="font-bold text-blue-500">AGT Certificação Ativa</h4>
-                  <p className="text-slate-500 text-[11px] mt-0.5 leading-relaxed">
-                    A submissão e sincronização direta gera de forma automatizada o elemento digital <strong>Hash de Assinatura Fiscal</strong> correspondente, conforme os decretos em vigor na República de Angola.
-                  </p>
-                </div>
-              </div>
+                {formErrors.global && <div className="p-3 bg-red-500/10 text-red-500 rounded-xl text-[10px] font-bold">{formErrors.global}</div>}
             </div>
-
-          </div>
-        </form>
+          </form>
+        </div>
       )}
 
-      {/* 3. PROFESSIONAL INVOICE PREVIEW VIEW */}
       {viewState === 'view' && selectedInvoice && (
-        <div className="space-y-6">
-          {/* View Mode controls bar */}
-          <div className="flex justify-between items-center pb-4 border-b border-slate-900/10 dark:border-slate-800/40 print:hidden">
-            <div className="flex items-center gap-3">
-              <button
-                id="btn-back-to-invoices"
-                onClick={() => setViewState('list')}
-                className={`p-1.5 rounded-lg border ${theme === 'dark' ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-slate-600'}`}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-              <div>
-                <h1 className="text-sm font-bold font-sans">Visualizador e Gestor de Fatura</h1>
-                <p className="text-[11px] text-slate-500 mt-0.5">Controlos operacionais de sincronia e impressão fiscal.</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {selectedInvoice.status === 'Draft' && canIssueOrCancelInvoice(user?.role) && (
-                <button
-                  id="btn-issue-invoice"
-                  disabled={isIssuing}
-                  onClick={async () => {
-                    setIsIssuing(true);
-                    try {
-                      const issued = await issueInvoice(selectedInvoice.id);
-                      setSelectedInvoice(issued);
-                      addNotification({
-                        title: 'Factura emitida',
-                        desc: `Documento ${issued.invoiceNo} emitido com assinatura fiscal.`,
-                        type: 'success'
-                      });
-                    } catch (error) {
-                      addNotification({
-                        title: 'Emissão bloqueada',
-                        desc: error instanceof Error ? error.message : 'Não foi possível emitir a factura.',
-                        type: 'warning'
-                      });
-                    } finally {
-                      setIsIssuing(false);
-                    }
-                  }}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg shadow-sm"
-                >
-                  {isIssuing ? 'A emitir...' : 'Emitir Fiscalmente'}
-                </button>
-              )}
-
-              {['Issued', 'AGT_Error'].includes(selectedInvoice.status) && canIssueOrCancelInvoice(user?.role) && (
-                <button
-                  id="btn-sync-now-agt"
-                  disabled={isSyncingAgt}
-                  onClick={async () => {
-                    setIsSyncingAgt(true);
-                    try {
-                      await syncInvoiceWithAGT(selectedInvoice.id);
-                      const refreshed = invoices.find((item) => item.id === selectedInvoice.id);
-                      if (refreshed) setSelectedInvoice(refreshed);
-                      addNotification({
-                        title: 'Sincronização AGT',
-                        desc: 'Pedido de sincronização enviado para a fila.',
-                        type: 'success'
-                      });
-                    } catch (error) {
-                      addNotification({
-                        title: 'Sync AGT falhou',
-                        desc: error instanceof Error ? error.message : 'Não foi possível sincronizar com a AGT.',
-                        type: 'warning'
-                      });
-                    } finally {
-                      setIsSyncingAgt(false);
-                    }
-                  }}
-                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg shadow-sm"
-                >
-                  {isSyncingAgt ? 'A sincronizar...' : 'Sincronizar AGT'}
-                </button>
-              )}
-
-              {canIssueOrCancelInvoice(user?.role) &&
-                ['Issued', 'Paid', 'Partial', 'AGT_Synced', 'AGT_Error'].includes(selectedInvoice.status) && (
-                <button
-                  id="btn-cancel-invoice"
-                  disabled={isCancelling}
-                  onClick={async () => {
-                    const reason = window.prompt('Motivo do cancelamento fiscal (obrigatório):');
-                    if (!reason || reason.trim().length < 3) {
-                      addNotification({
-                        title: 'Cancelamento bloqueado',
-                        desc: 'Indique um motivo com pelo menos 3 caracteres.',
-                        type: 'warning'
-                      });
-                      return;
-                    }
-                    if (!window.confirm(`Confirmar cancelamento da factura ${selectedInvoice.invoiceNo}?`)) {
-                      return;
-                    }
-                    setIsCancelling(true);
-                    try {
-                      const cancelled = await cancelInvoice(selectedInvoice.id, reason.trim());
-                      setSelectedInvoice(cancelled);
-                      addNotification({
-                        title: 'Factura cancelada',
-                        desc: `Documento ${cancelled.invoiceNo} anulado fiscalmente.`,
-                        type: 'success'
-                      });
-                    } catch (error) {
-                      addNotification({
-                        title: 'Cancelamento bloqueado',
-                        desc: error instanceof Error ? error.message : 'Não foi possível cancelar a factura.',
-                        type: 'warning'
-                      });
-                    } finally {
-                      setIsCancelling(false);
-                    }
-                  }}
-                  className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-lg shadow-sm"
-                >
-                  {isCancelling ? 'A cancelar...' : 'Cancelar Fiscalmente'}
-                </button>
-              )}
-
-              {selectedInvoice.status !== 'Paid' && selectedInvoice.status !== 'Cancelled' && selectedInvoice.status !== 'Draft' && (
-                <button
-                  id="btn-mark-as-paid"
-                  disabled
-                  className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold ${
-                    theme === 'dark' ? 'bg-slate-900 border-slate-800 text-emerald-400 hover:bg-slate-800' : 'bg-slate-100 border-slate-205 text-emerald-700 hover:bg-slate-200'
-                  }`}
-                  title="A liquidação será implementada no módulo de pagamentos."
-                >
-                  Liquidar (FR / VD)
-                </button>
-              )}
-
-              <button
-                id="btn-export-pdf"
-                onClick={() => window.print()}
-                className="p-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold flex items-center gap-1 shadow-sm transition-all"
-                title="Exportar como PDF de alta fidelidade"
-              >
-                <Download className="h-4 w-4" />
-                <span>Exportar PDF</span>
-              </button>
-
-              <button
-                id="btn-print-invoice"
-                onClick={() => window.print()}
-                className={`p-1.5 px-3 rounded-lg border text-[11px] font-semibold flex items-center gap-1 ${
-                  theme === 'dark' ? 'border-slate-800 text-slate-300 hover:bg-slate-900' : 'border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Printer className="h-4 w-4" />
-                <span>Imprimir</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 print:block">
-            
-            {/* Printable Visual Invoice Document */}
-            <div id="printable-invoice-canvas" className={`lg:col-span-3 p-8 rounded-xl shadow-lg border relative print:w-full print:p-0 print:border-none print:shadow-none print:text-black print:bg-white ${
-              theme === 'dark' ? 'bg-white text-slate-900 border-slate-300 shadow-slate-950/20' : 'bg-white text-slate-900 border-slate-200'
-            }`}>
-              
-              {/* Watermark of syncing */}
-              {selectedInvoice.status === 'AGT_Synced' && (
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rotate-12 opacity-[0.06] select-none pointer-events-none text-center">
-                  <span className="text-8xl font-black font-sans tracking-widest text-emerald-700 uppercase block">SINCRONIZADO</span>
-                  <span className="text-4xl font-sans tracking-wide text-emerald-700 uppercase font-bold block mt-3">AGT ORIGINAL</span>
-                </div>
-              )}
-
-              {/* Document Header details */}
-              <div className="flex justify-between items-start gap-6 border-b pb-6">
-                <div>
-                  <span className="text-[22px] font-black tracking-tight text-blue-600 font-sans block">
-                    {currentTenant.name}
-                  </span>
-                  <div className="text-xxs font-mono text-slate-500 space-y-0.5 mt-2 max-w-sm">
-                    <p>NIF: {currentTenant.nif}</p>
-                    <p>{currentTenant.address}</p>
-                    <p>{currentTenant.city}, {currentTenant.country}</p>
-                    <p className="font-bold text-slate-700">{currentTenant.fiscalRegime}</p>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <span className="text-3xl font-mono font-black text-slate-900 block tracking-tight uppercase">
-                    {selectedInvoice.type === 'NC' ? 'Nota de Crédito' : selectedInvoice.type === 'FT' ? 'Fatura' : selectedInvoice.type === 'FR' ? 'Fatura-Recibo' : 'Venda a Dinheiro'}
-                  </span>
-                  <span className="text-sm font-mono font-bold block text-slate-700 mt-1">
-                    Documento N.º: {selectedInvoice.invoiceNo}
-                  </span>
-                  
-                  <div className="text-right mt-3 text-xxs font-mono text-slate-500 space-y-1">
-                    <p>DATA DE EMISSÃO: <strong className="font-bold text-slate-800">{selectedInvoice.issueDate}</strong></p>
-                    <p>DATA DE VENCIMENTO: <strong className="font-bold text-slate-800">{selectedInvoice.dueDate}</strong></p>
-                    <p>CRIADO POR: <span className="uppercase">{selectedInvoice.createdBy}</span></p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Client & Address Info panel */}
-              <div className="grid grid-cols-2 gap-4 py-6 border-b text-xxs font-mono">
-                <div>
-                  <span className="text-slate-400 font-bold block mb-1.5">DADOS DO CLIENTE / ADQUIRENTE</span>
-                  <span className="text-xs font-bold font-sans text-slate-900">{selectedInvoice.clientName}</span>
-                  <p className="mt-1 text-slate-500">NIF: <span className="font-bold text-slate-800">{selectedInvoice.clientNif}</span></p>
-                  <p className="text-slate-500 mt-0.5">Endereço: {selectedInvoice.clientAddress}</p>
-                  
-                  {selectedInvoice.type === 'NC' && (
-                    <div className="mt-4">
-                      <span className="text-slate-400 font-bold block mb-1">REFERÊNCIA A DOCUMENTO ORIGINAL</span>
-                      <p className="text-slate-500">Documento: <span className="font-bold text-slate-800">{invoices.find(i => i.id === selectedInvoice.originDocumentId)?.invoiceNo || 'N/A'}</span></p>
-                      <p className="text-slate-500 mt-0.5">Motivo: {selectedInvoice.rectificationReason}</p>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="text-right shrink-0">
-                  <span className="text-slate-400 font-bold block mb-1">DADOS DE ENQUADRAMENTO FISCAL</span>
-                  <p className="text-slate-500">Programa Validado n.º 241/AGT/2026</p>
-                  <p className="text-slate-500 mt-0.5">Moeda: Kwanza Angolano (AOA / Kz)</p>
-                  <p className="text-slate-500 mt-0.5">Regime de Isenção/Transmissão Geral</p>
-                </div>
-              </div>
-
-              {/* Items column */}
-              <div className="py-6">
-                <table className="w-full text-left text-xxs font-mono">
-                  <thead>
-                    <tr className="border-b-2 text-slate-500 font-bold bg-slate-100/30">
-                      <th className="p-2 w-12 text-center">CÓD.</th>
-                      <th className="p-2">DESCRIÇÃO DA MERCADORIA OU INSUMO</th>
-                      <th className="p-2 w-14 text-center">QTD</th>
-                      <th className="p-2 w-20 text-right">FUNDO (AOA)</th>
-                      <th className="p-2 w-14 text-center">DESC.</th>
-                      <th className="p-2 w-12 text-center">TAXA.</th>
-                      <th className="p-2 w-24 text-right">TOTAL (AOA)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedInvoice.items.map((item, index) => (
-                      <tr key={index} className="border-b last:border-b-2 font-sans font-medium text-[11px]">
-                        <td className="p-2.5 font-mono text-center text-slate-500">{index + 1}</td>
-                        <td className="p-2.5 font-bold text-slate-800">
-                          {item.productName}
-                        </td>
-                        <td className="p-2.5 font-mono text-center text-slate-500">{item.quantity}</td>
-                        <td className="p-2.5 font-mono text-right text-slate-500">{item.price.toLocaleString('pt-PT')}</td>
-                        <td className="p-2.5 font-mono text-center text-slate-500">{item.discount}%</td>
-                        <td className="p-2.5 font-mono text-center text-slate-500">{item.taxRate}%</td>
-                        <td className="p-2.5 font-mono text-right font-bold text-slate-900">
-                          {item.total.toLocaleString('pt-PT')}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Math breakdown row */}
-              <div className="grid grid-cols-2 gap-4 text-xxs font-mono pb-6">
-                {/* Left side: Notes and Signature Hash Area */}
+        <div className="max-w-4xl mx-auto p-12 rounded-3xl border bg-white text-slate-800 space-y-10 shadow-2xl">
+            <div className="flex justify-between items-start border-b pb-10">
                 <div className="space-y-4">
-                  <div>
-                    <span className="text-slate-400 font-bold block mb-1">NOTAS INSTITUCIONAIS</span>
-                    <p className="text-slate-500 leading-relaxed max-w-xs text-[10px]">
-                      {selectedInvoice.notes || 'Incondicional. Sem juros incidentes se pago dentro da data regulamentar com referência de NIB ordinária.'}
-                    </p>
-                  </div>
-
-                  {selectedInvoice.invoiceHash && (
-                    <div className="p-2.5 rounded bg-slate-50 border border-slate-200 text-slate-600 font-mono text-[9px]">
-                      <span className="font-sans font-bold text-slate-800 block mb-0.5 uppercase tracking-wide">
-                        Assinatura Certificada AGT (Hash)
-                      </span>
-                      <p className="truncate block font-semibold">{selectedInvoice.invoiceHash}</p>
-                      <span className="text-[7.5px] text-slate-400 block mt-1 uppercase font-sans">
-                        Chave do algoritmo RSA sha256 validada pelo certificado fiscal nº 241
-                      </span>
+                    <h1 className="text-3xl font-black text-blue-600 uppercase">{currentTenant.name}</h1>
+                    <div className="text-xs space-y-1 text-slate-500 font-bold">
+                        <p>NIF: {currentTenant.nif} | {currentTenant.address}</p>
+                        <p className="text-blue-500">UNIDADE: {selectedInvoice.estabelecimentoCode || 'SEDE'}</p>
                     </div>
-                  )}
                 </div>
-
-                {/* Right side: Calculative aggregates */}
-                <div className="space-y-1.5 text-right w-80 ml-auto border-l pl-4 font-sans text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Total Ilíquido:</span>
-                    <span className="font-mono font-medium">{selectedInvoice.subtotal.toLocaleString('pt-PT')} AOA</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Total Descontos:</span>
-                    <span className="font-mono text-red-500">-{selectedInvoice.discountTotal.toLocaleString('pt-PT')} AOA</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Total IVA Colectado:</span>
-                    <span className="font-mono font-semibold">{selectedInvoice.taxTotal.toLocaleString('pt-PT')} AOA</span>
-                  </div>
-
-                  {selectedInvoice.withholdingTaxAmount > 0 && (
-                    <div className="flex justify-between text-yellow-600 font-semibold bg-yellow-500/5 px-1 py-0.5 rounded">
-                      <span>Retenção na Fonte (6.5%):</span>
-                      <span className="font-mono">-{selectedInvoice.withholdingTaxAmount.toLocaleString('pt-PT')} AOA</span>
-                    </div>
-                  )}
-
-                  <div className="flex justify-between border-t pt-2 mt-2 font-bold text-sm text-slate-900">
-                    <span>TOTAL PAYÁVEL (Ilíquido):</span>
-                    <span className="font-mono text-sm font-black text-blue-600">
-                      {selectedInvoice.grandTotal.toLocaleString('pt-PT')} AOA
-                    </span>
-                  </div>
+                <div className="text-right">
+                    <h2 className="text-5xl font-black text-slate-100">{selectedInvoice.type}</h2>
+                    <p className="font-mono font-black text-2xl text-blue-600">{selectedInvoice.invoiceNo || 'PROFORMA'}</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">DATA: {selectedInvoice.issueDate}</p>
+                    <div className="pt-4">{renderStatusBadge(selectedInvoice.status)}</div>
                 </div>
-              </div>
-
-              {/* Footer certification details and QR Code layout compliance */}
-              <div className="border-t pt-5 mt-4 flex justify-between items-center text-[9px] font-sans text-slate-400 leading-tight">
-                <div className="max-w-md">
-                  <p className="font-bold text-slate-650">DECLARAÇÃO DE CONFORMIDADE FISCAL</p>
-                  <p className="mt-1">
-                    Os bens ou serviços indicados foram efectivamente disponibilizados nos prazos estabelecidos neste documento. Processado por computador / NDFATURA software certificado n.º 241/AGT/2026.
-                  </p>
-                  <p className="mt-1 font-mono text-[8px]">
-                    SISTEMA CERTIFICADO EM ANGOLA - VALIDAÇÃO COMPLIANT COM REGRAS FISCAIS DO MINISTÉRIO DAS FINANÇAS.
-                  </p>
-                </div>
-
-                {/* Simulated QR Code compliance sector */}
-                {selectedInvoice.qrcodeString ? (
-                  <div className="flex flex-col items-center gap-1 shrink-0 border p-2 rounded bg-slate-50 shadow-inner">
-                    <div className="h-16 w-16 bg-slate-900 flex items-center justify-center text-white rounded">
-                      <QrCode className="h-12 w-12 text-blue-400" />
-                    </div>
-                    <span className="text-[7px] font-mono text-slate-500 tracking-wide mt-0.5">VALIDAR AGT QR</span>
-                  </div>
-                ) : (
-                  <div className="p-2 border border-slate-200 border-dashed rounded text-[8px] text-slate-400 text-center w-24">
-                     Pendente de Sincronia
-                  </div>
-                )}
-              </div>
-
+            </div>
+            
+            <div className="py-10 border-b">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Entidade Adquirente</p>
+                <h4 className="text-xl font-black">{selectedInvoice.clientName}</h4>
+                <p className="text-sm font-bold text-slate-500">NIF: {selectedInvoice.clientNif}</p>
             </div>
 
-            {/* Quick Operational Timeline card */}
-            <div className={`col-span-1 p-5 rounded-xl border print:hidden ${
-              theme === 'dark' ? 'bg-slate-950 border-slate-900 text-slate-300' : 'bg-white border-slate-200 text-slate-750'
-            } space-y-4`}>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Auditoria Fiscal e Historial</h3>
-              
-              <div className="space-y-4 text-xs font-sans">
-                {/* Step 1 */}
-                <div className="flex gap-2.5 items-start">
-                  <div className="h-5 w-5 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center text-[9px] font-mono shrink-0 mt-0.5">
-                     1
-                  </div>
-                  <div>
-                    <p className="font-bold">Documento Processado</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Criado e assinado no banco de dados local por Manuel Bento.</p>
-                    <span className="text-[9px] text-slate-400 font-mono block mt-1">{selectedInvoice.issueDate}</span>
-                  </div>
-                </div>
-
-                {/* Step 2 */}
-                <div className="flex gap-2.5 items-start">
-                  <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-mono shrink-0 mt-0.5 ${
-                    selectedInvoice.status === 'AGT_Synced' 
-                      ? 'bg-emerald-500/10 text-emerald-400' 
-                      : 'bg-slate-500/10 text-slate-400'
-                  }`}>
-                    2
-                  </div>
-                  <div>
-                    <p className="font-bold">Sincronização no Portal AGT</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">
-                      {selectedInvoice.status === 'AGT_Synced' 
-                        ? 'Comunicação oficial do XML SOAP para servidores municipais validado.' 
-                        : 'Transmissão pendente de assinatura digital oficial.'}
-                    </p>
-                    {selectedInvoice.agtSyncDate && (
-                      <span className="text-[9px] text-slate-400 font-mono block mt-1">{selectedInvoice.agtSyncDate}</span>
+            <div className="flex justify-between items-end pt-10">
+                <div className="space-y-4">
+                    {selectedInvoice.status !== 'Draft' && (
+                        <div className="p-4 bg-slate-900 rounded-2xl border border-white/5 space-y-2">
+                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Hash (AGT)</span>
+                            <p className="text-[10px] font-mono text-blue-400 break-all max-w-sm">{selectedInvoice.invoiceHash}</p>
+                        </div>
                     )}
-                  </div>
+                    <p className="text-[9px] text-slate-400 font-bold italic">Software Certificado n.º {currentTenant.agtCertificateNo || '---'}/AGT/2026</p>
                 </div>
-
-                {/* Step 3 */}
-                <div className="flex gap-2.5 items-start">
-                  <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-mono shrink-0 mt-0.5 ${
-                    selectedInvoice.status === 'Paid' 
-                      ? 'bg-emerald-500/10 text-emerald-400' 
-                      : 'bg-slate-500/10 text-slate-400'
-                  }`}>
-                    3
-                  </div>
-                  <div>
-                    <p className="font-bold">Facturação Liquidada</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">
-                      {selectedInvoice.status === 'Paid' 
-                        ? 'Pagamento em conciliação bancária confirmado e recebido em tesouraria.' 
-                        : 'Aguardando verificação ou guias de depósito por parte do adquirente.'}
-                    </p>
-                  </div>
+                <div className="text-right space-y-2">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-xs">Valor Total a Pagar</span>
+                    <h2 className="text-4xl font-black text-blue-600">{selectedInvoice.grandTotal.toLocaleString('pt-PT')} <span className="text-sm text-slate-400 font-bold">{selectedInvoice.currency}</span></h2>
                 </div>
-              </div>
-
-              {/* XML Schema Inspector simulator */}
-              <div className={`pt-4 border-t ${theme === 'dark' ? 'border-slate-900' : 'border-slate-100'} space-y-2`}>
-                <span className="text-[10px] font-mono text-slate-500 block uppercase">Ficheiro SAFT Integrado</span>
-                <div className="p-2 bg-slate-900 text-emerald-400 text-[8.5px] font-mono rounded h-24 overflow-y-auto w-full border border-slate-800">
-                  <span>&lt;InvoiceNo&gt;{selectedInvoice.invoiceNo}&lt;/InvoiceNo&gt;</span><br />
-                  <span>&lt;ATCUD&gt;{selectedInvoice.invoiceHash ? 'A-W3X-' + selectedInvoice.id : 'Pendente'}&lt;/ATCUD&gt;</span><br />
-                  <span>&lt;TaxPayable&gt;{selectedInvoice.taxTotal}&lt;/TaxPayable&gt;</span><br />
-                  <span>&lt;GrossTotal&gt;{selectedInvoice.grandTotal}&lt;/GrossTotal&gt;</span><br />
-                  <span>&lt;CustomerTaxID&gt;{selectedInvoice.clientNif}&lt;/CustomerTaxID&gt;</span>
-                </div>
-              </div>
             </div>
 
-          </div>
+            <div className="pt-10 flex gap-3 border-t">
+                {selectedInvoice.status === 'Draft' && (
+                    <button onClick={() => handleIssueInvoice(selectedInvoice.id)} disabled={isIssuing} className="flex-1 py-4 bg-emerald-600 text-white font-black rounded-2xl shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-3">
+                       {isIssuing ? <RefreshCcw className="h-5 w-5 animate-spin" /> : <FileCheck className="h-5 w-5" />}
+                       Emitir Fiscalmente (Sign)
+                    </button>
+                )}
+                <button onClick={() => setViewState('list')} className="px-10 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl hover:bg-slate-200 transition-all uppercase text-xs tracking-widest">Voltar</button>
+            </div>
         </div>
       )}
 

@@ -26,15 +26,30 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('ndf_token');
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers.set('Authorization', `Bearer ${token}`);
     }
     const tenantId = localStorage.getItem('ndf_active_tenant_id');
     if (tenantId) {
-        config.headers['X-Tenant-ID'] = tenantId;
+        config.headers.set('X-Organization-ID', tenantId);
     }
   }
   return config;
 });
+
+// Handle 401 globally
+apiClient.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            if (typeof window !== 'undefined') {
+                localStorage.removeItem('ndf_token');
+                localStorage.removeItem('ndf_active_tenant_id');
+                window.location.href = '/'; // Simple redirect to login
+            }
+        }
+        return Promise.reject(error);
+    }
+);
 
 export const hasAccessToken = () => {
     if (typeof window === 'undefined') return false;
@@ -188,11 +203,11 @@ export const InvoiceService = {
     return unwrap(response);
   },
   issue: async (id: string): Promise<Invoice> => {
-    const response = await apiClient.post<ApiEnvelope<Invoice>>(`/facturas/${id}/issue/`);
+    const response = await apiClient.post<ApiEnvelope<Invoice>>(`/facturas/${id}/emitir/`);
     return unwrap(response);
   },
   cancel: async (id: string, reason: string): Promise<Invoice> => {
-    const response = await apiClient.post<ApiEnvelope<Invoice>>(`/facturas/${id}/cancel/`, { reason });
+    const response = await apiClient.post<ApiEnvelope<Invoice>>(`/facturas/${id}/cancelar/`, { reason });
     return unwrap(response);
   },
   syncAGT: async (id: string): Promise<void> => {
