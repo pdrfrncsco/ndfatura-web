@@ -4,7 +4,6 @@ import * as React from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
 import { getApiFieldErrors } from '../../services/api';
-import { canIssueInvoice, canCancelInvoice } from '../../lib/rbac';
 import { 
   Invoice, 
   InvoiceItem, 

@@ -112,19 +112,18 @@ export function PaymentsModule() {
 
     try {
       setSubmitting(true);
-      const items = Object.entries(selectedInvoices).map(([invoice_id, amount]) => ({
-        invoice_id,
-        amount
+      const items = Object.entries(selectedInvoices).map(([invoiceId, amount]) => ({
+        invoiceId,
+        amountPaid: amount
       }));
 
       const receipt = await ReceiptService.create({
-        client: selectedClientId,
-        payment_method: paymentMethod,
+        clientId: selectedClientId,
+        paymentMethod: paymentMethod,
+        issueDate: new Date().toISOString().split('T')[0],
+        notes: '',
         items
       });
-
-      // Automatically issue for now to match Phase 6 goal of "completing cycle"
-      await ReceiptService.issue(receipt.id);
       
       addNotification({
         title: 'Recibo Emitido',

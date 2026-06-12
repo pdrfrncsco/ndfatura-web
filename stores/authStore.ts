@@ -13,7 +13,7 @@ interface AuthState {
   notifications: Array<{ id: string; title: string; desc: string; time: string; read: boolean; type: 'success' | 'warning' | 'info' }>;
   
   // Actions
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, otp?: string) => Promise<void>;
   bootstrapSession: () => Promise<void>;
   logout: () => void;
   switchTenant: (tenantId: string) => void;
@@ -53,8 +53,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   ],
 
-  login: async (email: string, password: string) => {
-    const session = await AuthService.login(email, password);
+  login: async (email: string, password: string, otp?: string) => {
+    const session = await AuthService.login(email, password, otp);
     const currentTenant = session.tenants[0] || null;
     setActiveTenantHeaders(currentTenant);
     set({

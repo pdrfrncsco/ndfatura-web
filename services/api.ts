@@ -117,8 +117,28 @@ export const TenantService = {
 };
 
 export const AuthService = {
-  login: async (email: string, password: string): Promise<{ user: User; tenants: Tenant[]; token: string }> => {
-    const response = await apiClient.post<ApiEnvelope<{ user: User; tenants: Tenant[]; access: string }>>('/auth/login/', { email, password });
+  register: async (data: any): Promise<User> => {
+    const response = await apiClient.post<ApiEnvelope<User>>('/auth/register/', data);
+    return unwrap(response);
+  },
+  requestPasswordReset: async (email: string): Promise<any> => {
+    const response = await apiClient.post('/auth/password-reset/', { email });
+    return response.data;
+  },
+  confirmPasswordReset: async (uidb64: string, token: string, password: string): Promise<any> => {
+    const response = await apiClient.post(`/auth/password-reset/${uidb64}/`, { token, password });
+    return response.data;
+  },
+  setup2FA: async (): Promise<{ secret: string; qr_code_url: string }> => {
+    const response = await apiClient.post('/auth/2fa/setup/');
+    return response.data;
+  },
+  verify2FA: async (token: string): Promise<any> => {
+    const response = await apiClient.post('/auth/2fa/verify/', { token });
+    return response.data;
+  },
+  login: async (email: string, password: string, otp?: string): Promise<{ user: User; tenants: Tenant[]; token: string }> => {
+    const response = await apiClient.post<ApiEnvelope<{ user: User; tenants: Tenant[]; access: string }>>('/auth/login/', { email, password, otp });
     const data = unwrap(response);
     if (typeof window !== 'undefined') {
         localStorage.setItem('ndf_token', data.access);

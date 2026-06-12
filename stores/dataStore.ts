@@ -420,6 +420,8 @@ export const useDataStore = create<DataState>((set, get) => ({
     if (remoteStats) return remoteStats;
     return {
       totalRevenue: 0,
+      totalInvoiced: 0,
+      revenueCollected: 0,
       ivaCollected: 0,
       withholdingCollected: 0,
       pendingAmount: 0,

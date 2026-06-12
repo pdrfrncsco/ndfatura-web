@@ -22,7 +22,7 @@ export default function AuditLogsView() {
   const filteredLogs = tenantLogs.filter(log => {
     const matchesSearch = log.userName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           log.details.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          log.ipAddress.includes(searchTerm);
+                          (log.ipAddress || '127.0.0.1').includes(searchTerm);
     const matchesAction = actionFilter === 'ALL' || log.action === actionFilter;
     return matchesSearch && matchesAction;
   });
@@ -123,7 +123,7 @@ export default function AuditLogsView() {
                       </span>
                     </td>
                     <td className="p-3.5 leading-relaxed text-slate-700 dark:text-slate-400">{log.details}</td>
-                    <td className="p-3.5 font-mono text-[10.5px] text-center text-slate-500 whitespace-nowrap">{log.ipAddress}</td>
+                    <td className="p-3.5 font-mono text-[10.5px] text-center text-slate-500 whitespace-nowrap">{log.ipAddress || '127.0.0.1'}</td>
                   </tr>
                 ))
               )}

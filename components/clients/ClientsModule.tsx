@@ -104,7 +104,7 @@ export default function ClientsModule() {
     setName(c.name);
     setNif(c.nif);
     setEmail(c.email);
-    setPhone(c.phone || '');
+    setPhone(c.phone ?? '');
     setAddress(c.address);
     setCity(c.city);
     setFormErrors({});
@@ -115,10 +115,12 @@ export default function ClientsModule() {
     e.preventDefault();
     setFormErrors({});
 
-    const formData = { name, nif, email, phone: phone || undefined, address, city, country: 'Angola' };
+    const clientData = {
+      name, nif, email, phone: phone || '', address, city, country: 'Angola'
+    };
 
     // Validate using Zod
-    const validationResult = clientSchema.safeParse(formData);
+    const validationResult = clientSchema.safeParse(clientData);
     if (!validationResult.success) {
       const errors: Record<string, string> = {};
       validationResult.error.issues.forEach(err => {
@@ -133,7 +135,7 @@ export default function ClientsModule() {
     setIsSaving(true);
     try {
       if (isEditMode) {
-        await updateClient(editingId, formData);
+        await updateClient(editingId, clientData);
         addNotification({
           title: 'Cliente Actualizado',
           desc: `Os dados do cliente ${name} foram modificados com sucesso.`,
@@ -141,7 +143,7 @@ export default function ClientsModule() {
         });
       } else {
         await addClient({
-          ...formData,
+          ...clientData,
           tenantId: currentTenant.id
         });
         addNotification({

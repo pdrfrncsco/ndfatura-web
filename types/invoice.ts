@@ -75,9 +75,10 @@ export interface Client {
   name: string;
   nif: string;
   email: string;
-  phone: string;
+  phone?: string;
   address: string;
   city: string;
+  country?: string;
   tenantId: string;
 }
 
@@ -119,6 +120,7 @@ export interface Invoice {
   withholdingTaxRate: number;
   withholdingTaxAmount: number;
   grandTotal: number;
+  paidAmount: number;
   invoiceHash: string;
   previousHash: string;
   agtSyncDate?: string;
@@ -143,10 +145,15 @@ export interface AuditLog {
   details: string;
   entityType: string;
   entityId: string;
+  tenantId?: string;
+  ipAddress?: string;
 }
 
 export interface DashboardStats {
   totalRevenue: number;
+  totalInvoiced: number;
+  revenueCollected: number;
+  projectionsRealized?: number;
   ivaCollected: number;
   withholdingCollected: number;
   pendingAmount: number;
@@ -155,11 +162,11 @@ export interface DashboardStats {
   paidCount: number;
   syncSuccessRate: number;
   monthlyRevenue: Array<{ month: string, amount: number, tax: number }>;
-  categorySales: Array<{ category: string, value: number }>;
+  categorySales: Array<{ category: string, value: number, name?: string }>;
   recentActivity: AuditLog[];
 }
 
-export type PaymentMethod = 'NU' | 'TB' | 'CC' | 'OU';
+export type PaymentMethod = 'NU' | 'TB' | 'CC' | 'OU' | 'TR';
 export type ReceiptStatus = 'Draft' | 'Issued' | 'Cancelled';
 
 export interface ReceiptItem {

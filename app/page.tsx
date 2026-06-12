@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import QueryProvider from '../providers/queryProvider';
 import { useAuthStore } from '../stores/authStore';
 import { useDataStore } from '../stores/dataStore';
@@ -15,22 +16,29 @@ import ReportsModule from '../components/reports/ReportsModule';
 import UsersModule from '../components/users/UsersModule';
 import AuditLogsView from '../components/audit/AuditLogsView';
 import SettingsModule from '../components/settings/SettingsModule';
-import { Building, Lock, Mail, ChevronRight, CheckCircle } from 'lucide-react';
+import { hasAccessToken } from '../services/api';
 
 function ApplicationShell() {
-  const { currentScreen, isAuthenticated, login, bootstrapSession, currentTenant, theme } = useAuthStore();
+  const router = useRouter();
+  const { currentScreen, isAuthenticated, bootstrapSession, currentTenant, theme } = useAuthStore();
   const { loadTenantData, isLoadingRemoteData, remoteDataError } = useDataStore();
-  
-  // Auth Form State inside SPA Shell
-  const [email, setEmail] = React.useState('ndeasdigital@gmail.com');
-  const [password, setPassword] = React.useState('admin12345');
-  const [role, setRole] = React.useState('Admin');
-  const [loginError, setLoginError] = React.useState('');
-  const [isLoggingIn, setIsLoggingIn] = React.useState(false);
+  const [isInitializing, setIsInitializing] = React.useState(true);
 
   React.useEffect(() => {
-    bootstrapSession();
+    const init = async () => {
+      if (hasAccessToken()) {
+        await bootstrapSession();
+      }
+      setIsInitializing(false);
+    };
+    init();
   }, [bootstrapSession]);
+
+  React.useEffect(() => {
+    if (!isInitializing && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [isInitializing, isAuthenticated, router]);
 
   React.useEffect(() => {
     if (isAuthenticated && currentTenant) {
@@ -38,132 +46,14 @@ function ApplicationShell() {
     }
   }, [currentTenant, isAuthenticated, loadTenantData]);
 
-  // Trigger login
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    setIsLoggingIn(true);
-    try {
-      await login(email, password);
-    } catch {
-      setLoginError('Credenciais inválidas ou API indisponível.');
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
   const mainBg = theme === 'dark' 
     ? 'bg-[#0B0F19] text-slate-100' 
     : 'bg-[#F8FAFC] text-slate-900';
 
-  // 1. If not authenticated, render beautiful fintech login/register
-  if (!isAuthenticated) {
+  if (isInitializing || !isAuthenticated) {
     return (
-      <div className={`min-h-screen flex items-center justify-center p-4 transition-colors font-sans bg-slate-950 text-slate-100 relative overflow-hidden`}>
-        {/* Ambient subtle light blobs */}
-        <div className="absolute top-[-10%] right-[-1%] h-[400px] w-[400px] rounded-full bg-blue-600/10 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-[-10%] left-[-1%] h-[400px] w-[400px] rounded-full bg-emerald-600/5 blur-3xl pointer-events-none" />
-
-        <div className="w-full max-w-md space-y-6 relative z-10">
-          
-          {/* Logo center */}
-          <div className="text-center space-y-2">
-            <div className="h-12 w-12 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl mx-auto shadow-sm tracking-tighter">
-              FA
-            </div>
-            <h1 className="text-xl font-bold font-sans tracking-tight text-white mt-4">
-              FACTURYAN
-            </h1>
-            <p className="text-slate-400 text-xs">
-              SaaS de Facturação Electrónica Certificada pela AGT. <a href="https://ndeas.cloud" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 font-bold">by ND</a>
-            </p>
-          </div>
-
-          {/* Login card */}
-          <div className="bg-slate-900/60 backdrop-blur-md rounded-xl border border-slate-800 p-6 space-y-4 shadow-xl">
-            <div className="border-b border-slate-800 pb-2 mb-2">
-              <span className="text-[10px] font-mono tracking-widest text-slate-400 uppercase font-bold">
-                Aceder ao Painel Corporativo
-              </span>
-            </div>
-
-            <form onSubmit={handleLoginSubmit} className="space-y-4 text-xs">
-              {/* Email */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-500 block">Endereço de E-mail de Operador</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-                  <input
-                    id="input-login-email"
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-200 focus:border-blue-500 focus:outline-none"
-                    placeholder="nome@empresa.ao"
-                  />
-                </div>
-              </div>
-
-              {/* Password */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-500 block">Palavra-passe de Segurança</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-                  <input
-                    id="input-login-password"
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-200 focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Roles Simulator Selector */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-500 block">Perfil de Acesso (Simulação)</label>
-                <select
-                  id="select-login-role"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-200 focus:border-blue-500 focus:outline-none font-sans font-bold"
-                >
-                  <option value="Admin">Administrador (Manuel Bento)</option>
-                  <option value="Financial_Director">Director Financeiro (Afonso Henriques)</option>
-                  <option value="Billing_Clerk">Técnico de Facturação (Elsa Patrício)</option>
-                  <option value="Auditor">Inspector Fiscal AGT (Carlos Neves)</option>
-                </select>
-              </div>
-
-              {/* Login submit */}
-              <button
-                id="btn-login-submit"
-                type="submit"
-                disabled={isLoggingIn}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center justify-center gap-1 transition-transform"
-              >
-                <span>{isLoggingIn ? 'A validar credenciais...' : 'Aceder ao Sistema'}</span>
-                <ChevronRight className="h-4 w-4" />
-              </button>
-
-              {loginError && (
-                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-semibold text-red-300">
-                  {loginError}
-                </div>
-              )}
-
-            </form>
-          </div>
-
-          {/* Registration placeholder info */}
-          <div className="text-center text-[11px] text-slate-600 flex items-center justify-center gap-1.5">
-            <CheckCircle className="h-4 w-4 text-blue-500" />
-            <span>Assinado digitalmente por chaves municipais autorizadas.</span>
-          </div>
-
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-[#050B14]">
+        <div className="h-8 w-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin"></div>
       </div>
     );
   }

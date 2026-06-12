@@ -122,7 +122,7 @@ export default function DashboardView() {
             </div>
           </div>
           <div className="mt-4 font-sans font-bold text-lg sm:text-xl truncate">
-            {formatKwanza(stats.totalInvoiced)}
+            {formatKwanza(stats.totalInvoiced || 0)}
           </div>
           <div className="mt-2 text-[11px] flex items-center gap-1.5 text-blue-500 font-medium">
             <TrendingUp className="h-3 w-3" />
@@ -141,7 +141,7 @@ export default function DashboardView() {
             </div>
           </div>
           <div className="mt-4 font-sans font-bold text-lg sm:text-xl truncate text-emerald-500">
-            {formatKwanza(stats.revenueCollected)}
+            {formatKwanza(stats.revenueCollected || 0)}
           </div>
           <div className="mt-2 text-[11px] flex items-center gap-1 text-emerald-500 font-medium">
             <CheckCircle className="h-3 w-3" />
@@ -240,11 +240,11 @@ export default function DashboardView() {
                     fontSize: '11px',
                     fontFamily: 'sans-serif'
                   }}
-                  formatter={(value) => [`${Number(value).toLocaleString('pt-PT')} AOA`, "Facturação"]}
+                  formatter={(value) => [`${Number(value).toLocaleString('pt-PT')} AOA`, 'Facturação']}
                 />
                 <Area 
                   type="monotone" 
-                  dataKey="value" 
+                  dataKey="amount"
                   stroke={theme === 'dark' ? '#3b82f6' : '#2563eb'} 
                   strokeWidth={2}
                   fillOpacity={1} 
@@ -268,7 +268,7 @@ export default function DashboardView() {
             <ResponsiveContainer width="100%" height="105%">
               <PieChart>
                 <Pie
-                  data={stats.categorySales}
+                  data={stats.categorySales || []}
                   cx="50%"
                   cy="50%"
                   innerRadius={50}
@@ -276,7 +276,7 @@ export default function DashboardView() {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {stats.categorySales.map((entry, index) => (
+                  {(stats.categorySales || []).map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />
                   ))}
                 </Pie>
@@ -296,11 +296,11 @@ export default function DashboardView() {
 
           {/* Catalog keys */}
           <div className="space-y-1.5 text-xs text-slate-400">
-            {stats.categorySales.map((cat, idx) => (
-              <div key={cat.name} className="flex justify-between items-center">
+            {(stats.categorySales || []).map((cat, idx) => (
+              <div key={cat.category} className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: pieColors[idx % pieColors.length] }} />
-                  <span className="font-medium text-slate-700 dark:text-slate-300">{cat.name}</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300">{cat.category}</span>
                 </div>
                 <span className="font-mono text-[10px] text-right text-slate-500">{formatKwanza(cat.value)}</span>
               </div>
@@ -331,7 +331,7 @@ export default function DashboardView() {
 
         <div className="h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={stats.projectionsRealized} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <BarChart data={stats.monthlyRevenue || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartThemeColors.gridColor} />
               <XAxis 
                 dataKey="month" 
