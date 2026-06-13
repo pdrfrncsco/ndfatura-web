@@ -7,7 +7,9 @@ import {
   Product, 
   Receipt, 
   Tenant, 
+  TenantMember,
   User, 
+  UserRole,
   StockMovement,
   Estabelecimento,
   ExchangeRate
@@ -162,6 +164,17 @@ export const AuthService = {
         localStorage.removeItem('ndf_active_tenant_id');
     }
   }
+};
+
+export const UserService = {
+  getTenantMembers: async (): Promise<TenantMember[]> => {
+    const response = await apiClient.get<ApiEnvelope<TenantMember[]>>('/auth/members/');
+    return unwrap(response);
+  },
+  updateTenantMember: async (id: string, data: { isActive?: boolean; role?: UserRole }): Promise<TenantMember> => {
+    const response = await apiClient.patch<ApiEnvelope<TenantMember>>(`/auth/members/${id}/`, data);
+    return unwrap(response);
+  },
 };
 
 export const ClientService = {

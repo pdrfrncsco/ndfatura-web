@@ -8,6 +8,22 @@ export interface User {
   avatar?: string;
 }
 
+export type TenantMemberStatus = 'Active' | 'Suspended';
+
+export interface TenantMember {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  membershipRole: 'owner' | 'admin' | 'member' | 'auditor' | string;
+  isActive: boolean;
+  isDefault: boolean;
+  status: TenantMemberStatus;
+  isSelf: boolean;
+  joinedAt?: string;
+}
+
 export interface Tenant {
   id: string;
   name: string;
