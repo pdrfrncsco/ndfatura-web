@@ -13,6 +13,8 @@ export default function RegisterPage() {
   const [lastName, setLastName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [companyName, setCompanyName] = React.useState('');
+  const [companyNif, setCompanyNif] = React.useState('');
   
   const [error, setError] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
@@ -27,7 +29,9 @@ export default function RegisterPage() {
         first_name: firstName,
         last_name: lastName,
         email,
-        password
+        password,
+        company_name: companyName,
+        company_nif: companyNif
       });
       setIsSuccess(true);
     } catch (err: any) {
@@ -115,6 +119,31 @@ export default function RegisterPage() {
               onChange={(e) => setEmail(e.target.value)}
               className="w-full pl-10 pr-4 py-3 rounded-xl border border-white/10 bg-black/20 text-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all text-sm placeholder:text-slate-600"
               placeholder="nome@empresa.ao"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 block">Nome da Empresa</label>
+            <input
+              type="text"
+              required
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-black/20 text-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all text-sm placeholder:text-slate-600"
+              placeholder="Ex: Facturyan Lda"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 block">NIF da Empresa</label>
+            <input
+              type="text"
+              required
+              value={companyNif}
+              onChange={(e) => setCompanyNif(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-black/20 text-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all text-sm placeholder:text-slate-600"
+              placeholder="Ex: 500000000"
             />
           </div>
         </div>
