@@ -78,6 +78,16 @@ export default function ReportsModule() {
     }
   };
 
+  const handleDownloadSaft = async () => {
+    if (!exportedDetails?.job_id) return;
+    try {
+        const fileName = `SAFT_AO_${saftMonth}_${saftYear}.xml`;
+        await SaftService.downloadXml(exportedDetails.job_id, fileName);
+    } catch (err) {
+        addNotification({ title: 'Erro no Download', desc: 'Ficheiro SAF-T ainda não está pronto ou erro no servidor.', type: 'error' });
+    }
+  };
+
   const handleFetchIvaMap = async () => {
     setIsLoadingIva(true);
     try {
@@ -196,6 +206,22 @@ export default function ReportsModule() {
                 {isExporting ? <Database className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 Exportar SAF-T
               </button>
+
+              {exportedDetails && (
+                <div className="pt-4 border-t border-slate-900/10 dark:border-slate-800/40 animate-in fade-in slide-in-from-top-2">
+                   <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-3">
+                      <CheckCircle className="h-4 w-4 text-emerald-500" />
+                      <span className="text-[10px] font-bold text-emerald-600">Exportação preparada com sucesso.</span>
+                   </div>
+                   <button 
+                    onClick={handleDownloadSaft}
+                    className="w-full py-2.5 bg-slate-800 text-white font-bold rounded-lg flex items-center justify-center gap-2 hover:bg-slate-900 transition-all"
+                   >
+                     <FileCode className="h-4 w-4" />
+                     Descarregar XML
+                   </button>
+                </div>
+              )}
             </div>
           </div>
           

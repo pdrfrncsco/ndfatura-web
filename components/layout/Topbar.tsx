@@ -14,7 +14,8 @@ import {
   CheckCircle,
   AlertTriangle,
   Info,
-  Clock
+  Clock,
+  Menu
 } from 'lucide-react';
 
 export default function Topbar() {
@@ -27,7 +28,8 @@ export default function Topbar() {
     theme, 
     toggleTheme,
     notifications,
-    markNotificationsAsRead
+    markNotificationsAsRead,
+    toggleMobileSidebar
   } = useAuthStore();
 
   const [tenantOpen, setTenantOpen] = React.useState(false);
@@ -70,9 +72,16 @@ export default function Topbar() {
     : 'hover:bg-slate-50';
 
   return (
-    <header className={`h-16 w-full px-6 flex items-center justify-between sticky top-0 z-20 print:hidden ${topbarBg}`}>
-      {/* 1. Left Side: Active Tenant Selector dropdown */}
-      <div className="flex items-center gap-4">
+    <header className={`h-16 w-full px-4 md:px-6 flex items-center justify-between sticky top-0 z-20 print:hidden ${topbarBg}`}>
+      {/* 1. Left Side: Mobile Menu + Active Tenant Selector dropdown */}
+      <div className="flex items-center gap-3 md:gap-4">
+        <button 
+          onClick={toggleMobileSidebar}
+          className={`p-2 rounded-lg md:hidden ${hoverBg} text-slate-500`}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+
         <div className="relative">
           <button 
             id="btn-organization-selector"

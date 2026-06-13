@@ -10,6 +10,7 @@ interface AuthState {
   theme: 'light' | 'dark';
   currentScreen: 'dashboard' | 'invoices' | 'payments' | 'clients' | 'products' | 'reports' | 'settings' | 'users' | 'audit_logs';
   sidebarCollapsed: boolean;
+  mobileSidebarOpen: boolean;
   notifications: Array<{ id: string; title: string; desc: string; time: string; read: boolean; type: 'success' | 'warning' | 'info' }>;
   
   // Actions
@@ -22,6 +23,7 @@ interface AuthState {
   setTheme: (theme: 'light' | 'dark') => void;
   setCurrentScreen: (screen: 'dashboard' | 'invoices' | 'payments' | 'clients' | 'products' | 'reports' | 'settings' | 'users' | 'audit_logs') => void;
   toggleSidebar: () => void;
+  toggleMobileSidebar: () => void;
   markNotificationsAsRead: () => void;
   addNotification: (noti: { title: string; desc: string; type: 'success' | 'warning' | 'info' }) => void;
 }
@@ -34,6 +36,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   theme: 'dark', 
   currentScreen: 'dashboard',
   sidebarCollapsed: false,
+  mobileSidebarOpen: false,
   notifications: [
     {
       id: 'noti-1',
@@ -116,9 +119,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   
   setTheme: (theme: 'light' | 'dark') => set({ theme }),
 
-  setCurrentScreen: (screen) => set({ currentScreen: screen }),
+  setCurrentScreen: (screen) => set({ currentScreen: screen, mobileSidebarOpen: false }),
 
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+
+  toggleMobileSidebar: () => set((state) => ({ mobileSidebarOpen: !state.mobileSidebarOpen })),
 
   markNotificationsAsRead: () => set((state) => ({
     notifications: state.notifications.map(n => ({ ...n, read: true }))

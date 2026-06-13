@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
-import { getApiFieldErrors } from '../../services/api';
+import { getApiFieldErrors, InvoiceService } from '../../services/api';
 import { 
   Invoice, 
   InvoiceItem, 
@@ -36,6 +36,7 @@ import {
   User as UserIcon,
   Tag
 } from 'lucide-react';
+import { FeedbackOverlay } from '../common/FeedbackOverlay';
 
 function generateFaturaDates(type: InvoiceType) {
   const today = new Date();
@@ -50,11 +51,13 @@ export default function InvoiceModule() {
   const { currentTenant, theme, user, addNotification } = useAuthStore();
   const { 
     clients, products, invoices, estabelecimentos, exchangeRates,
-    addInvoice, issueInvoice, cancelInvoice, syncInvoiceWithAGT 
+    addInvoice, issueInvoice, cancelInvoice, syncInvoiceWithAGT, validateInvoiceWithAGT 
   } = useDataStore();
 
   const [viewState, setViewState] = React.useState<'list' | 'create' | 'view'>('list');
   const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null);
+  const [isSyncing, setIsSyncing] = React.useState(false);
+  const [feedback, setFeedback] = React.useState<{ status: 'idle' | 'loading' | 'success' | 'error', message: string }>({ status: 'idle', message: '' });
 
   // List States
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -246,15 +249,45 @@ export default function InvoiceModule() {
 
   const handleIssueInvoice = async (id: string) => {
     if (!confirm('Deseja emitir este documento? Esta acção é irreversível e gerará um hash fiscal AGT.')) return;
-    setIsIssuing(true);
+    setFeedback({ status: 'loading', message: 'Assinando documento e gerando Hash Fiscal...' });
     try {
       const result = await issueInvoice(id);
       setSelectedInvoice(result);
-      addNotification({ title: 'Factura Emitida', desc: 'Documento assinado digitalmente (RS256).', type: 'success' });
+      setFeedback({ status: 'success', message: 'Documento assinado e emitido com sucesso.' });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro na emissão');
-    } finally {
-      setIsIssuing(false);
+      setFeedback({ status: 'error', message: err instanceof Error ? err.message : 'Erro na emissão fiscal.' });
+    }
+  };
+
+  const handleValidateAGT = async (id: string) => {
+    setFeedback({ status: 'loading', message: 'Comunicando com os servidores da AGT...' });
+    try {
+      await validateInvoiceWithAGT(id);
+      const updated = invoices.find(i => i.id === id);
+      if (updated) setSelectedInvoice(updated);
+      setFeedback({ status: 'success', message: 'Sincronização com AGT validada.' });
+    } catch (err) {
+      setFeedback({ status: 'error', message: err instanceof Error ? err.message : 'Falha na comunicação com a AGT.' });
+    }
+  };
+
+  const handleSendEmail = async (id: string) => {
+    setFeedback({ status: 'loading', message: 'Enviando e-mail com anexo PDF...' });
+    try {
+        await InvoiceService.sendEmail(id);
+        setFeedback({ status: 'success', message: 'Factura enviada para o e-mail do cliente.' });
+    } catch (err) {
+        setFeedback({ status: 'error', message: 'Não foi possível enviar o e-mail. Verifique os dados do cliente.' });
+    }
+  };
+
+    const handleDownloadPdf = async (invoice: Invoice) => {
+
+    try {
+        const fileName = `${invoice.invoiceNo?.replace(/\//g, '_') || 'factura'}.pdf`;
+        await InvoiceService.downloadPdf(invoice.id, fileName);
+    } catch (err) {
+        addNotification({ title: 'Erro no Download', desc: 'Não foi possível gerar o PDF.', type: 'error' });
     }
   };
 
@@ -329,10 +362,10 @@ export default function InvoiceModule() {
             <table className="w-full text-left text-xs">
                 <thead className={theme === 'dark' ? 'bg-slate-900/60' : 'bg-slate-50/80'}>
                     <tr className="uppercase text-[10px] font-black text-slate-500 tracking-widest">
-                        <th className="p-4">Número</th>
-                        <th className="p-4">Data</th>
+                        <th className="p-4">Documento</th>
+                        <th className="p-4 hidden sm:table-cell">Data</th>
                         <th className="p-4 text-right">Valor Total</th>
-                        <th className="p-4 text-center">Estado</th>
+                        <th className="p-4 text-center hidden sm:table-cell">Estado</th>
                         <th className="p-4 text-right"></th>
                     </tr>
                 </thead>
@@ -341,10 +374,13 @@ export default function InvoiceModule() {
                         <tr><td colSpan={5} className="p-16 text-center text-slate-400 italic">Sem documentos.</td></tr>
                     ) : currentInvoices.map(inv => (
                         <tr key={inv.id} onClick={() => { setSelectedInvoice(inv); setViewState('view'); }} className="hover:bg-blue-500/5 cursor-pointer">
-                            <td className="p-4 font-mono font-bold text-blue-500">{inv.invoiceNo}</td>
-                            <td className="p-4 text-slate-500">{inv.issueDate}</td>
-                            <td className="p-4 font-mono font-black text-right">{inv.grandTotal.toLocaleString('pt-PT')} {inv.currency}</td>
-                            <td className="p-4 text-center">{renderStatusBadge(inv.status)}</td>
+                            <td className="p-4">
+                                <p className="font-mono font-bold text-blue-500">{inv.invoiceNo}</p>
+                                <p className="text-[10px] text-slate-500 sm:hidden">{inv.clientName}</p>
+                            </td>
+                            <td className="p-4 text-slate-500 hidden sm:table-cell">{inv.issueDate}</td>
+                            <td className="p-4 font-mono font-black text-right">{inv.grandTotal.toLocaleString('pt-PT')} <span className="text-[10px] opacity-50">{inv.currency}</span></td>
+                            <td className="p-4 text-center hidden sm:table-cell">{renderStatusBadge(inv.status)}</td>
                             <td className="p-4 text-right"><ChevronRight className="h-4 w-4 text-slate-400" /></td>
                         </tr>
                     ))}
@@ -472,11 +508,34 @@ export default function InvoiceModule() {
                        Emitir Fiscalmente (Sign)
                     </button>
                 )}
+                {(selectedInvoice.status === 'Issued' || selectedInvoice.status === 'AGT_Error') && (
+                    <button onClick={() => handleValidateAGT(selectedInvoice.id)} disabled={isSyncing} className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-3">
+                       {isSyncing ? <RefreshCcw className="h-5 w-5 animate-spin" /> : <RefreshCcw className="h-5 w-5" />}
+                       Validar na AGT
+                    </button>
+                )}
+                {selectedInvoice.status !== 'Draft' && (
+                    <>
+                        <button onClick={() => handleDownloadPdf(selectedInvoice)} className="flex-1 py-4 bg-slate-800 text-white font-black rounded-2xl shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3 uppercase text-xs">
+                           <Printer className="h-5 w-5" />
+                           PDF
+                        </button>
+                        <button onClick={() => handleSendEmail(selectedInvoice.id)} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-3 uppercase text-xs">
+                           <Share2 className="h-5 w-5" />
+                           E-mail
+                        </button>
+                    </>
+                )}
                 <button onClick={() => setViewState('list')} className="px-10 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl hover:bg-slate-200 transition-all uppercase text-xs tracking-widest">Voltar</button>
             </div>
         </div>
       )}
 
+      <FeedbackOverlay 
+        status={feedback.status} 
+        message={feedback.message} 
+        onClose={() => setFeedback({ status: 'idle', message: '' })} 
+      />
     </div>
   );
 }

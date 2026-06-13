@@ -99,6 +99,15 @@ export function PaymentsModule() {
 
   const totalPayment = Object.values(selectedInvoices).reduce((sum, val) => sum + val, 0);
 
+  const handleDownloadPdf = async (receipt: Receipt) => {
+    try {
+      const fileName = `${receipt.receiptNo?.replace(/\//g, '_') || 'recibo'}.pdf`;
+      await ReceiptService.downloadPdf(receipt.id, fileName);
+    } catch (err) {
+      addNotification({ title: 'Erro no Download', desc: 'Não foi possível gerar o PDF.', type: 'error' });
+    }
+  };
+
   const handleCreateReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClientId || Object.keys(selectedInvoices).length === 0) {
@@ -426,7 +435,10 @@ export function PaymentsModule() {
                 </div>
              </div>
              <div className="flex items-center gap-2">
-                <button className={`px-4 py-2 border rounded-lg text-xs font-bold flex items-center gap-2 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                <button 
+                  onClick={() => handleDownloadPdf(selectedReceipt)}
+                  className={`px-4 py-2 border rounded-lg text-xs font-bold flex items-center gap-2 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+                >
                   <Download className="w-4 h-4" />
                   Descarregar PDF
                 </button>

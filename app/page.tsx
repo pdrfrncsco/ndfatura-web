@@ -62,7 +62,7 @@ function ApplicationShell() {
   return (
     <div className={`min-h-screen flex ${theme === 'dark' ? 'dark bg-slate-950 text-slate-100' : 'bg-[#F8FAFC] text-slate-900'} transition-all font-sans relative overflow-hidden`}>
       
-      {/* Sidebar collapsible left drawer */}
+      {/* Sidebar collapsible left drawer (Fixed on mobile, Relative on desktop) */}
       <Sidebar />
 
       {/* Main workspace region */}

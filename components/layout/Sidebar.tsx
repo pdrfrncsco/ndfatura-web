@@ -29,7 +29,9 @@ export default function Sidebar({ onSearchFocus }: SidebarProps) {
     sidebarCollapsed, 
     toggleSidebar, 
     currentTenant, 
-    theme 
+    theme,
+    mobileSidebarOpen,
+    toggleMobileSidebar
   } = useAuthStore();
 
   const menuItems = [
@@ -54,12 +56,23 @@ export default function Sidebar({ onSearchFocus }: SidebarProps) {
   const footerBg = 'border-t border-slate-750 bg-[#0F172A]';
 
   return (
-    <aside 
-      id="ndf-sidebar" 
-      className={`h-screen flex flex-col transition-all duration-300 select-none print:hidden ${
-        sidebarCollapsed ? 'w-16' : 'w-64'
-      } ${sidebarBg} relative z-30`}
-    >
+    <>
+      {/* Mobile Overlay */}
+      {mobileSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden animate-in fade-in duration-300"
+          onClick={toggleMobileSidebar}
+        />
+      )}
+
+      <aside 
+        id="ndf-sidebar" 
+        className={`h-screen flex flex-col transition-all duration-300 select-none print:hidden fixed md:relative z-50 ${
+          mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        } ${
+          sidebarCollapsed ? 'md:w-16' : 'md:w-64'
+        } w-64 ${sidebarBg}`}
+      >
       {/* Brand Header */}
       <div className={`flex items-center justify-between h-16 border-b border-slate-750 bg-[#1E293B] ${sidebarCollapsed ? 'px-3.5' : 'px-6'}`}>
         <div className="flex items-center gap-3 overflow-hidden">
@@ -152,5 +165,6 @@ export default function Sidebar({ onSearchFocus }: SidebarProps) {
         )}
       </div>
     </aside>
+    </>
   );
 }

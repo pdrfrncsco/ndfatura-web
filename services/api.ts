@@ -236,6 +236,25 @@ export const InvoiceService = {
   syncAGT: async (id: string): Promise<void> => {
     await apiClient.post(`/facturas/${id}/sync-agt/`);
   },
+  validateAGT: async (id: string): Promise<Invoice> => {
+    const response = await apiClient.post<ApiEnvelope<Invoice>>(`/facturas/${id}/validar-agt/`);
+    return unwrap(response);
+  },
+  sendEmail: async (id: string): Promise<void> => {
+    await apiClient.post(`/facturas/${id}/enviar-email/`);
+  },
+  downloadPdf: async (id: string, fileName: string): Promise<void> => {
+    const response = await apiClient.get(`/facturas/${id}/pdf/`, {
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  },
   getPdfInfo: async (id: string): Promise<{ status: string; url?: string }> => {
     const response = await apiClient.get(`/facturas/${id}/pdf/`);
     return response.data;
@@ -250,6 +269,18 @@ export const ReceiptService = {
   create: async (data: { clientId: string; items: { invoiceId: string; amountPaid: number }[]; paymentMethod: string; issueDate: string; notes?: string }): Promise<Receipt> => {
     const response = await apiClient.post<ApiEnvelope<Receipt>>('/recibos/', data);
     return unwrap(response);
+  },
+  downloadPdf: async (id: string, fileName: string): Promise<void> => {
+    const response = await apiClient.get(`/recibos/${id}/pdf/`, {
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   },
 };
 
@@ -281,6 +312,18 @@ export const SaftService = {
   exportSaftXml: async (tenantId: string, year: number, month: number): Promise<any> => {
     const response = await apiClient.post<ApiEnvelope<any>>('/saft/export/', { year, month });
     return unwrap(response);
+  },
+  downloadXml: async (jobId: string, fileName: string): Promise<void> => {
+    const response = await apiClient.get(`/saft/jobs/${jobId}/`, {
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   },
 };
 

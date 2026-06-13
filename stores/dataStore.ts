@@ -66,6 +66,7 @@ interface DataState {
   cancelInvoice: (id: string, reason: string) => Promise<Invoice>;
   updateInvoiceStatus: (id: string, status: Invoice['status']) => void;
   syncInvoiceWithAGT: (id: string) => Promise<void>;
+  validateInvoiceWithAGT: (id: string) => Promise<void>;
   addAuditLog: (log: Omit<AuditLog, 'id' | 'timestamp'>) => void;
   
   // Actions for Receipts
@@ -385,15 +386,23 @@ export const useDataStore = create<DataState>((set, get) => ({
     set({ remoteDataError: null });
     try {
       await InvoiceService.syncAGT(id);
-      const updated = get().invoices.map((i) => {
-        if (i.id === id) {
-          return { ...i, status: 'Issued' as const };
-        }
-        return i;
-      });
-      set({ invoices: updated });
+      // O sync-agt no backend é assíncrono, então actualizamos o estado local para reflectir que está a processar se necessário
+      // Mas o fetch posterior ou o polling manual tratará disso.
     } catch (error) {
       set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao solicitar sincronização AGT.' });
+      throw error;
+    }
+  },
+
+  validateInvoiceWithAGT: async (id) => {
+    set({ remoteDataError: null });
+    try {
+      const updatedInvoice = await InvoiceService.validateAGT(id);
+      const updated = get().invoices.map((i) => (i.id === id ? updatedInvoice : i));
+      set({ invoices: updated });
+      setStorageItem('ndf_invoices', updated);
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao validar documento na AGT.' });
       throw error;
     }
   },
