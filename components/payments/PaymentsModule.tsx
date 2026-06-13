@@ -1,26 +1,62 @@
 'use client';
 
 import * as React from 'react';
-import { 
-  Plus, 
-  Search, 
-  FileText, 
-  CheckCircle, 
-  Clock, 
-  X,
-  MoreVertical,
-  Download,
-  Filter,
+import {
   ArrowLeft,
-  Wallet,
-  Receipt as ReceiptIcon,
+  Building2,
+  Check,
+  CheckCircle2,
+  ChevronDown,
   ChevronRight,
-  User as UserIcon
+  CreditCard,
+  Download,
+  FileText,
+  Landmark,
+  Plus,
+  Receipt as ReceiptIcon,
+  Search,
+  ShieldCheck,
+  Smartphone,
+  Wallet,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
 import { ReceiptService } from '../../services/api';
-import { Receipt, Invoice, Client, PaymentMethod } from '../../types/invoice';
+import { Invoice, PaymentMethod, Receipt } from '../../types/invoice';
+
+const toAmount = (value: unknown) => {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+};
+
+const money = (value: unknown) => toAmount(value).toLocaleString('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 });
+
+const dateLabel = (date: string) => {
+  if (!date) return '-';
+  return new Date(date).toLocaleDateString('pt-AO', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const initials = (name?: string) =>
+  (name || 'ND')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+
+const cardClass = (theme: string) =>
+  theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200';
+
+const softClass = (theme: string) =>
+  theme === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200';
+
+const paymentMethods: Array<{ value: PaymentMethod; label: string; icon: React.ElementType }> = [
+  { value: 'TR', label: 'Transferência', icon: Landmark },
+  { value: 'NU', label: 'Numerário', icon: Wallet },
+  { value: 'CC', label: 'TPA / Cartão', icon: CreditCard },
+  { value: 'TB', label: 'Multicaixa', icon: Smartphone },
+];
 
 export function PaymentsModule() {
   const { currentTenant, theme, addNotification } = useAuthStore();
@@ -30,12 +66,11 @@ export function PaymentsModule() {
   const [loading, setLoading] = React.useState(true);
   const [searchTerm, setSearchTerm] = React.useState('');
   const [viewState, setViewState] = React.useState<'list' | 'create' | 'view'>('list');
-  
-  // Create state
   const [selectedClientId, setSelectedClientId] = React.useState<string>('');
   const [pendingInvoices, setPendingInvoices] = React.useState<Invoice[]>([]);
   const [selectedInvoices, setSelectedInvoices] = React.useState<Record<string, number>>({});
   const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethod>('TR');
+  const [reference, setReference] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [selectedReceipt, setSelectedReceipt] = React.useState<Receipt | null>(null);
 
@@ -44,11 +79,11 @@ export function PaymentsModule() {
       setLoading(true);
       const data = await ReceiptService.getAll();
       setReceipts(data);
-    } catch (error) {
+    } catch {
       addNotification({
         title: 'Erro de Dados',
         desc: 'Não foi possível carregar a lista de recibos.',
-        type: 'warning'
+        type: 'warning',
       });
     } finally {
       setLoading(false);
@@ -61,25 +96,44 @@ export function PaymentsModule() {
     fetchInvoices();
   }, [loadReceipts, fetchClients, fetchInvoices]);
 
-  const filteredReceipts = receipts.filter(r => 
-    (r.receiptNo?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (r.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+  if (!currentTenant) return null;
+
+  const filteredReceipts = receipts.filter(
+    (receipt) =>
+      (receipt.receiptNo?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (receipt.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase()),
   );
+
+  const totalReceived = receipts.reduce((sum, receipt) => sum + (receipt.status === 'Issued' ? toAmount(receipt.totalAmount) : 0), 0);
+  const openInvoices = invoices.filter(
+    (inv) => (inv.status === 'Issued' || inv.status === 'Partial' || inv.status === 'AGT_Synced') && toAmount(inv.paidAmount) < toAmount(inv.grandTotal),
+  );
+  const openAmount = openInvoices.reduce((sum, inv) => sum + Math.max(toAmount(inv.grandTotal) - toAmount(inv.paidAmount), 0), 0);
+  const selectedClient = clients.find((client) => client.id === selectedClientId);
+  const selectedInvoiceCount = Object.keys(selectedInvoices).length;
+  const totalPayment = Object.values(selectedInvoices).reduce((sum, val) => sum + val, 0);
+  const selectedInvoiceTotal = pendingInvoices
+    .filter((inv) => selectedInvoices[inv.id])
+    .reduce((sum, inv) => sum + toAmount(inv.grandTotal), 0);
+  const alreadyPaidTotal = pendingInvoices
+    .filter((inv) => selectedInvoices[inv.id])
+    .reduce((sum, inv) => sum + toAmount(inv.paidAmount), 0);
 
   const handleClientChange = (clientId: string) => {
     setSelectedClientId(clientId);
-    const clientInvoices = invoices.filter(inv => 
-      inv.clientId === clientId && 
-      (inv.status === 'Issued' || inv.status === 'Partial' || inv.status === 'AGT_Synced') &&
-      inv.paidAmount < inv.grandTotal
+    const clientInvoices = invoices.filter(
+      (inv) =>
+        inv.clientId === clientId &&
+        (inv.status === 'Issued' || inv.status === 'Partial' || inv.status === 'AGT_Synced') &&
+        toAmount(inv.paidAmount) < toAmount(inv.grandTotal),
     );
     setPendingInvoices(clientInvoices);
     setSelectedInvoices({});
   };
 
   const toggleInvoiceSelection = (invoice: Invoice) => {
-    const remaining = invoice.grandTotal - invoice.paidAmount;
-    setSelectedInvoices(prev => {
+    const remaining = Math.max(toAmount(invoice.grandTotal) - toAmount(invoice.paidAmount), 0);
+    setSelectedInvoices((prev) => {
       const next = { ...prev };
       if (next[invoice.id]) {
         delete next[invoice.id];
@@ -91,30 +145,36 @@ export function PaymentsModule() {
   };
 
   const handleAmountChange = (invoiceId: string, amount: number) => {
-    setSelectedInvoices(prev => ({
+    setSelectedInvoices((prev) => ({
       ...prev,
-      [invoiceId]: amount
+      [invoiceId]: amount,
     }));
   };
 
-  const totalPayment = Object.values(selectedInvoices).reduce((sum, val) => sum + val, 0);
+  const resetCreate = () => {
+    setSelectedClientId('');
+    setPendingInvoices([]);
+    setSelectedInvoices({});
+    setPaymentMethod('TR');
+    setReference('');
+  };
 
   const handleDownloadPdf = async (receipt: Receipt) => {
     try {
       const fileName = `${receipt.receiptNo?.replace(/\//g, '_') || 'recibo'}.pdf`;
       await ReceiptService.downloadPdf(receipt.id, fileName);
-    } catch (err) {
-      addNotification({ title: 'Erro no Download', desc: 'Não foi possível gerar o PDF.', type: 'error' });
+    } catch {
+      addNotification({ title: 'Erro no Download', desc: 'Não foi possível gerar o PDF.', type: 'warning' });
     }
   };
 
   const handleCreateReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClientId || Object.keys(selectedInvoices).length === 0) {
+    if (!selectedClientId || selectedInvoiceCount === 0) {
       addNotification({
         title: 'Validação',
         desc: 'Seleccione um cliente e pelo menos uma factura.',
-        type: 'warning'
+        type: 'warning',
       });
       return;
     }
@@ -123,32 +183,32 @@ export function PaymentsModule() {
       setSubmitting(true);
       const items = Object.entries(selectedInvoices).map(([invoiceId, amount]) => ({
         invoiceId,
-        amountPaid: amount
+        amountPaid: amount,
       }));
 
-      const receipt = await ReceiptService.create({
+      await ReceiptService.create({
         clientId: selectedClientId,
-        paymentMethod: paymentMethod,
+        paymentMethod,
         issueDate: new Date().toISOString().split('T')[0],
-        notes: '',
-        items
+        notes: reference ? `Referência: ${reference}` : '',
+        items,
       });
-      
+
       addNotification({
         title: 'Recibo Emitido',
         desc: 'A liquidação foi processada e o recibo fiscal assinado com sucesso.',
-        type: 'success'
+        type: 'success',
       });
-      
+
+      resetCreate();
       setViewState('list');
-      setSelectedClientId('');
       loadReceipts();
-      fetchInvoices(); // Refresh invoice status
-    } catch (error) {
+      fetchInvoices();
+    } catch {
       addNotification({
         title: 'Falha na Emissão',
         desc: 'Ocorreu um erro ao processar o recibo fiscal.',
-        type: 'warning'
+        type: 'warning',
       });
     } finally {
       setSubmitting(false);
@@ -156,371 +216,446 @@ export function PaymentsModule() {
   };
 
   const renderStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Issued':
-        return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-            EMITIDO
-          </span>
-        );
-      case 'AGT_Synced':
-        return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-500 border border-blue-500/20">
-            SINCRONIZADO AGT
-          </span>
-        );
-      case 'Draft':
-        return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
-            RASCUNHO
-          </span>
-        );
-      case 'Cancelled':
-        return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
-            CANCELADO
-          </span>
-        );
-      default:
-        return <span className="text-xs">{status}</span>;
-    }
+    const config =
+      status === 'Issued'
+        ? { label: 'Emitido', cls: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' }
+        : status === 'Cancelled'
+          ? { label: 'Cancelado', cls: 'bg-rose-500/10 text-rose-600 border-rose-500/20' }
+          : { label: 'Rascunho', cls: 'bg-amber-500/10 text-amber-600 border-amber-500/20' };
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${config.cls}`}>
+        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+        {config.label}
+      </span>
+    );
   };
 
-  if (!currentTenant) return null;
-
   return (
-    <div className="space-y-6">
-      {viewState === 'list' && (
-        <>
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Recebimentos</h1>
-              <p className="text-slate-500 text-sm">Gira liquidações e emita recibos para os seus clientes</p>
-            </div>
-            <button 
-              onClick={() => setViewState('create')} 
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg flex items-center gap-2 shadow-sm transition-all active:scale-95"
+    <div className="space-y-5">
+      <div className={`flex gap-1 overflow-x-auto border-b px-1 ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'}`}>
+        {[
+          { id: 'list', label: 'Recebimentos', icon: ReceiptIcon },
+          { id: 'create', label: 'Novo recebimento', icon: Plus },
+          { id: 'view', label: 'Detalhe', icon: FileText, disabled: !selectedReceipt },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              disabled={tab.disabled}
+              onClick={() => {
+                if (tab.id === 'create') resetCreate();
+                setViewState(tab.id as 'list' | 'create' | 'view');
+              }}
+              className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                viewState === tab.id
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-slate-500 hover:bg-slate-500/5 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
             >
-              <Plus className="w-4 h-4" />
-              Novo Recebimento
+              <Icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {viewState === 'list' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <KpiCard theme={theme} title="Total recebido" value={money(totalReceived)} hint={`${receipts.length} recibos registados`} tone="emerald" />
+            <KpiCard theme={theme} title="Por liquidar" value={money(openAmount)} hint={`${openInvoices.length} facturas em aberto`} tone="amber" />
+            <KpiCard theme={theme} title="Recibos emitidos" value={String(receipts.filter((receipt) => receipt.status === 'Issued').length)} hint="Documentos assinados fiscalmente" tone="indigo" />
+          </div>
+
+          <div className={`flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center ${cardClass(theme)}`}>
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                placeholder="Pesquisar por recibo ou cliente..."
+                className={`w-full rounded-md border py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-500 ${softClass(theme)}`}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={() => {
+                resetCreate();
+                setViewState('create');
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+            >
+              <Plus className="h-4 w-4" />
+              Novo recebimento
             </button>
           </div>
 
-          {/* Stats Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} shadow-sm flex items-center space-x-4`}>
-              <div className="bg-emerald-100 dark:bg-emerald-950/30 p-3 rounded-lg text-emerald-600 dark:text-emerald-400">
-                <Wallet className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Total Recebido</p>
-                <p className="text-xl font-bold text-slate-800 dark:text-white">
-                  {receipts.reduce((sum, r) => sum + (r.status === 'Issued' ? r.totalAmount : 0), 0).toLocaleString('pt-AO', { style: 'currency', currency: 'AOA' })}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className={`rounded-xl border ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'} shadow-sm overflow-hidden`}>
-            <div className={`p-4 border-b ${theme === 'dark' ? 'border-slate-900 bg-slate-900/40' : 'border-slate-200 bg-slate-50/50'} flex items-center justify-between`}>
-              <div className="relative w-full max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                  placeholder="Pesquisar recibos..." 
-                  className={`w-full pl-10 pr-4 py-2 text-sm rounded-lg border ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-200 focus:border-indigo-500' : 'bg-white border-slate-200 focus:border-indigo-500'} focus:outline-none transition-all`}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <button className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg border ${theme === 'dark' ? 'border-slate-800 hover:bg-slate-900' : 'border-slate-200 hover:bg-slate-100'} transition-all`}>
-                <Filter className="w-4 h-4" />
-                Filtros
-              </button>
-            </div>
-
+          <div className={`overflow-hidden rounded-lg border shadow-sm ${cardClass(theme)}`}>
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className={`text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b ${theme === 'dark' ? 'border-slate-900' : 'border-slate-200'}`}>
-                  <tr>
-                    <th className="p-4">Nº Recibo</th>
-                    <th className="p-4">Data</th>
-                    <th className="p-4">Cliente</th>
-                    <th className="p-4">Método</th>
-                    <th className="p-4 text-center">Estado</th>
-                    <th className="p-4 text-right">Total</th>
-                    <th className="p-4"></th>
+              <table className="w-full min-w-[860px] text-left text-sm">
+                <thead className={theme === 'dark' ? 'bg-slate-900/70' : 'bg-slate-50'}>
+                  <tr className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="px-4 py-3">Nº Recibo</th>
+                    <th className="px-4 py-3">Cliente</th>
+                    <th className="px-4 py-3">Data</th>
+                    <th className="px-4 py-3">Método</th>
+                    <th className="px-4 py-3">Estado</th>
+                    <th className="px-4 py-3 text-right">Total</th>
+                    <th className="px-4 py-3" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {loading ? (
-                    <tr><td colSpan={7} className="p-8 text-center text-slate-500 text-sm">A carregar recibos...</td></tr>
-                  ) : filteredReceipts.length === 0 ? (
-                    <tr><td colSpan={7} className="p-8 text-center text-slate-500 text-sm">Nenhum recibo encontrado</td></tr>
-                  ) : filteredReceipts.map((receipt) => (
-                    <tr key={receipt.id} className={`${theme === 'dark' ? 'hover:bg-slate-900/40' : 'hover:bg-slate-50/50'} transition-colors group`}>
-                      <td className="p-4 font-mono text-xs font-bold text-slate-900 dark:text-slate-200">{receipt.receiptNo || 'Rascunho'}</td>
-                      <td className="p-4 text-xs text-slate-600 dark:text-slate-400">{new Date(receipt.issueDate).toLocaleDateString()}</td>
-                      <td className="p-4 text-xs font-semibold text-slate-700 dark:text-slate-300">{receipt.clientName}</td>
-                      <td className="p-4 text-xs text-slate-600 dark:text-slate-400">{receipt.paymentMethod}</td>
-                      <td className="p-4 text-center">{renderStatusBadge(receipt.status)}</td>
-                      <td className="p-4 text-right font-bold text-slate-900 dark:text-white">
-                        {receipt.totalAmount.toLocaleString('pt-AO', { style: 'currency', currency: 'AOA' })}
-                      </td>
-                      <td className="p-4 text-right">
-                        <button 
-                          onClick={() => {
-                            setSelectedReceipt(receipt);
-                            setViewState('view');
-                          }}
-                          className={`p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all ${theme === 'dark' ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-600'}`}
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-500">
+                        A carregar recibos...
                       </td>
                     </tr>
-                  ))}
+                  ) : filteredReceipts.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-500">
+                        Nenhum recibo encontrado.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredReceipts.map((receipt) => (
+                      <tr
+                        key={receipt.id}
+                        onClick={() => {
+                          setSelectedReceipt(receipt);
+                          setViewState('view');
+                        }}
+                        className="cursor-pointer hover:bg-indigo-500/5"
+                      >
+                        <td className="px-4 py-3 font-mono font-semibold text-indigo-600">{receipt.receiptNo || 'Rascunho'}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/10 text-xs font-semibold text-indigo-600">
+                              {initials(receipt.clientName)}
+                            </div>
+                            <div>
+                              <div className="font-medium">{receipt.clientName}</div>
+                              <div className="text-[11px] text-slate-500">NIF: {receipt.clientNif || '-'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{dateLabel(receipt.issueDate)}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{methodLabel(receipt.paymentMethod)}</td>
+                        <td className="px-4 py-3">{renderStatusBadge(receipt.status)}</td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold">{money(receipt.totalAmount)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <ChevronRight className="ml-auto h-4 w-4 text-slate-400" />
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {viewState === 'create' && (
-        <form onSubmit={handleCreateReceipt} className="space-y-6">
-          <div className="flex justify-between items-center pb-4 border-b border-slate-900/10 dark:border-slate-800/40">
+        <form onSubmit={handleCreateReceipt} className="animate-in slide-in-from-right-3 duration-200">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setViewState('list')}
-                className={`p-1.5 rounded-lg border ${theme === 'dark' ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-slate-600'}`}
-              >
+              <button type="button" onClick={() => setViewState('list')} className="rounded-md border p-2 dark:border-slate-800">
                 <ArrowLeft className="h-4 w-4" />
               </button>
               <div>
-                <h1 className="text-lg font-bold">Novo Recebimento</h1>
-                <p className="text-[11px] text-slate-500 mt-0.5">Seleccione o cliente e as facturas para liquidação.</p>
+                <h1 className="text-lg font-semibold">Novo recebimento</h1>
+                <p className="text-xs text-slate-500">Seleccione cliente, liquide facturas e emita o recibo fiscal.</p>
               </div>
             </div>
+            <button
+              type="submit"
+              disabled={submitting || totalPayment <= 0}
+              className="hidden items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 sm:inline-flex"
+            >
+              <Check className="h-4 w-4" />
+              {submitting ? 'A processar...' : 'Confirmar e emitir recibo'}
+            </button>
+          </div>
 
-            <div className="flex items-center gap-2">
+          <div className="grid grid-cols-1 overflow-hidden rounded-lg border lg:grid-cols-[1fr_320px] dark:border-slate-800">
+            <main className={`space-y-5 p-5 ${theme === 'dark' ? 'bg-slate-950' : 'bg-white'}`}>
+              <section className="space-y-3">
+                <SectionTitle icon={Building2} label="1 - Seleccionar cliente" />
+                <div className={`rounded-lg border p-3 ${softClass(theme)}`}>
+                  <select value={selectedClientId} onChange={(e) => handleClientChange(e.target.value)} className={`w-full rounded-md border px-3 py-2 text-sm outline-none ${cardClass(theme)}`} required>
+                    <option value="">Seleccione um cliente...</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name} - {client.nif}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedClient && (
+                    <div className="mt-3 flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 text-sm font-semibold text-amber-600">
+                        {initials(selectedClient.name)}
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold">{selectedClient.name}</div>
+                        <div className="text-xs text-slate-500">
+                          NIF: {selectedClient.nif} · Saldo em dívida: {money(pendingInvoices.reduce((sum, inv) => sum + Math.max(toAmount(inv.grandTotal) - toAmount(inv.paidAmount), 0), 0))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <SectionTitle icon={FileText} label="2 - Facturas em aberto" />
+                <div className={`overflow-hidden rounded-lg border ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'}`}>
+                  <div className={`grid grid-cols-[36px_1fr_120px_120px_140px] gap-3 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 ${theme === 'dark' ? 'bg-slate-900/70' : 'bg-slate-50'}`}>
+                    <span />
+                    <span>Documento</span>
+                    <span className="text-right">Valor total</span>
+                    <span className="text-right">Em dívida</span>
+                    <span className="text-right">Pagar</span>
+                  </div>
+                  <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {!selectedClientId ? (
+                      <div className="px-3 py-8 text-center text-sm text-slate-500">Seleccione um cliente para ver facturas pendentes.</div>
+                    ) : pendingInvoices.length === 0 ? (
+                      <div className="px-3 py-8 text-center text-sm text-slate-500">Nenhuma factura pendente encontrada.</div>
+                    ) : (
+                      pendingInvoices.map((invoice) => {
+                        const remaining = Math.max(toAmount(invoice.grandTotal) - toAmount(invoice.paidAmount), 0);
+                        const selected = selectedInvoices[invoice.id] !== undefined;
+                        return (
+                          <div key={invoice.id} className={`grid grid-cols-[36px_1fr_120px_120px_140px] items-center gap-3 px-3 py-3 text-sm ${selected ? 'bg-indigo-500/5' : ''}`}>
+                            <button
+                              type="button"
+                              onClick={() => toggleInvoiceSelection(invoice)}
+                              className={`flex h-5 w-5 items-center justify-center rounded border ${
+                                selected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 dark:border-slate-700'
+                              }`}
+                            >
+                              {selected && <Check className="h-3.5 w-3.5" />}
+                            </button>
+                            <div>
+                              <div className="font-mono font-semibold">{invoice.invoiceNo}</div>
+                              <div className="text-[11px] text-slate-500">Emitida {dateLabel(invoice.issueDate)}</div>
+                            </div>
+                            <div className="text-right font-mono">{money(invoice.grandTotal)}</div>
+                            <div className="text-right font-mono text-amber-600">{money(remaining)}</div>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min={0}
+                              max={remaining}
+                              disabled={!selected}
+                              value={selectedInvoices[invoice.id] || ''}
+                              onChange={(e) => handleAmountChange(invoice.id, Number(e.target.value))}
+                              className={`rounded-md border px-2 py-1.5 text-right font-mono text-sm outline-none disabled:opacity-40 ${softClass(theme)}`}
+                            />
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <SectionTitle icon={Wallet} label="3 - Método de pagamento" />
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                  {paymentMethods.map((method) => {
+                    const Icon = method.icon;
+                    return (
+                      <button
+                        key={method.value}
+                        type="button"
+                        onClick={() => setPaymentMethod(method.value)}
+                        className={`rounded-md border p-3 text-center text-xs transition ${
+                          paymentMethod === method.value
+                            ? 'border-indigo-500 bg-indigo-500/10 text-indigo-600'
+                            : 'border-slate-200 hover:border-slate-300 dark:border-slate-800'
+                        }`}
+                      >
+                        <Icon className="mx-auto mb-1 h-5 w-5" />
+                        {method.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </main>
+
+            <aside className={`space-y-5 border-t p-5 lg:border-l lg:border-t-0 ${theme === 'dark' ? 'border-slate-800 bg-slate-900/40' : 'border-slate-200 bg-slate-50'}`}>
+              <SectionTitle icon={CheckCircle2} label="Resumo do recebimento" />
+              <div className="py-2 text-center">
+                <div className="text-3xl font-semibold">{money(totalPayment)}</div>
+                <div className="mt-1 text-xs text-slate-500">Angolan Kwanza · AOA</div>
+              </div>
+              <div className={`rounded-lg border p-4 ${cardClass(theme)}`}>
+                <SummaryRow label="Facturas seleccionadas" value={String(selectedInvoiceCount)} />
+                <SummaryRow label="Total facturado" value={money(selectedInvoiceTotal)} />
+                <SummaryRow label="Já pago" value={money(alreadyPaidTotal)} />
+                <div className="mt-3 border-t pt-3 dark:border-slate-800">
+                  <SummaryRow label="A receber agora" value={money(totalPayment)} strong />
+                </div>
+              </div>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium text-slate-500">Nº de referência / comprovativo</span>
+                <input
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  placeholder="Ex: TRANSF-2026-08811"
+                  className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-indigo-500 ${cardClass(theme)}`}
+                />
+              </label>
               <button
                 type="submit"
                 disabled={submitting || totalPayment <= 0}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm disabled:opacity-50"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
               >
-                {submitting ? 'A processar...' : 'Confirmar e Emitir Recibo'}
+                <Check className="h-4 w-4" />
+                {submitting ? 'A processar...' : 'Confirmar e emitir recibo'}
               </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-5">
-              <div className={`p-5 rounded-xl border ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'} space-y-4`}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Dados do Cliente</h3>
-                <select 
-                  className={`w-full p-2.5 rounded-lg border text-sm ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200'} focus:outline-none focus:border-indigo-500`}
-                  value={selectedClientId}
-                  onChange={(e) => handleClientChange(e.target.value)}
-                  required
-                >
-                  <option value="">Seleccione um cliente...</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name} ({c.nif})</option>)}
-                </select>
-
-                {selectedClientId && (
-                  <div className="space-y-4 pt-2">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center">
-                        <Clock className="w-3.5 h-3.5 mr-1.5" /> Facturas em Aberto
-                      </h3>
-                    </div>
-                    
-                    <div className={`border rounded-lg overflow-hidden ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'}`}>
-                      <table className="w-full text-left text-xs">
-                        <thead className={`${theme === 'dark' ? 'bg-slate-900/50' : 'bg-slate-50'} font-bold text-slate-500`}>
-                          <tr>
-                            <th className="p-3 w-10"></th>
-                            <th className="p-3">Factura</th>
-                            <th className="p-3 text-right">Total</th>
-                            <th className="p-3 text-right">Em Dívida</th>
-                            <th className="p-3 text-right w-32">Valor a Pagar</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
-                          {pendingInvoices.length === 0 ? (
-                            <tr><td colSpan={5} className="p-4 text-center text-slate-500 italic">Nenhuma factura pendente encontrada.</td></tr>
-                          ) : pendingInvoices.map(inv => (
-                            <tr key={inv.id} className={selectedInvoices[inv.id] ? (theme === 'dark' ? 'bg-indigo-950/20' : 'bg-indigo-50/30') : ''}>
-                              <td className="p-3 text-center">
-                                <input 
-                                  type="checkbox" 
-                                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                  checked={!!selectedInvoices[inv.id]} 
-                                  onChange={() => toggleInvoiceSelection(inv)}
-                                />
-                              </td>
-                              <td className="p-3">
-                                <div className="font-bold">{inv.invoiceNo}</div>
-                                <div className="text-[10px] text-slate-500">{new Date(inv.issueDate).toLocaleDateString()}</div>
-                              </td>
-                              <td className="p-3 text-right">{inv.grandTotal.toLocaleString('pt-AO')}</td>
-                              <td className="p-3 text-right text-rose-600 font-bold">
-                                {(inv.grandTotal - inv.paidAmount).toLocaleString('pt-AO')}
-                              </td>
-                              <td className="p-3">
-                                <input 
-                                  type="number" 
-                                  step="0.01"
-                                  disabled={!selectedInvoices[inv.id]}
-                                  value={selectedInvoices[inv.id] || ''}
-                                  onChange={(e) => handleAmountChange(inv.id, Number(e.target.value))}
-                                  className={`w-full p-1.5 text-right text-sm rounded-md border ${theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'} focus:outline-none focus:border-indigo-500 disabled:opacity-30`}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+              <div className="text-center text-xs text-slate-500">O recibo será assinado digitalmente e enviado à AGT automaticamente.</div>
+              <div className="flex items-start gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-emerald-700 dark:text-emerald-400">
+                <ShieldCheck className="mt-0.5 h-4 w-4" />
+                <div className="text-xs">Série RC/2026 activa · próximo recibo preparado para emissão.</div>
               </div>
-            </div>
-
-            <div className="space-y-5">
-              <div className={`p-5 rounded-xl border ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'} space-y-4`}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Pagamento</h3>
-                <div className="space-y-3">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase">Método</label>
-                  <select 
-                    className={`w-full p-2.5 rounded-lg border text-sm ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200'} focus:outline-none focus:border-indigo-500`}
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                  >
-                    <option value="CH">Numerário (Cash)</option>
-                    <option value="TR">Transferência Bancária</option>
-                    <option value="TP">TPA</option>
-                    <option value="DP">Depósito</option>
-                    <option value="OU">Outro</option>
-                  </select>
-                </div>
-
-                <div className={`p-4 rounded-xl border-2 border-dashed ${theme === 'dark' ? 'border-slate-800 bg-slate-900/20' : 'border-slate-100 bg-slate-50/50'} flex flex-col items-center justify-center text-center space-y-2`}>
-                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total a Liquidar</span>
-                   <span className="text-3xl font-black text-indigo-600 dark:text-indigo-400">
-                     {totalPayment.toLocaleString('pt-AO', { style: 'currency', currency: 'AOA' })}
-                   </span>
-                </div>
-              </div>
-            </div>
+            </aside>
           </div>
         </form>
       )}
 
       {viewState === 'view' && selectedReceipt && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className="flex justify-between items-center pb-4 border-b border-slate-900/10 dark:border-slate-800/40">
-             <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setViewState('list')}
-                  className={`p-1.5 rounded-lg border ${theme === 'dark' ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-slate-600'}`}
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
-                <div>
-                  <h1 className="text-lg font-bold">Detalhes do Recibo</h1>
-                  <p className="text-[11px] text-slate-500 mt-0.5">{selectedReceipt.receiptNo}</p>
-                </div>
-             </div>
-             <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => handleDownloadPdf(selectedReceipt)}
-                  className={`px-4 py-2 border rounded-lg text-xs font-bold flex items-center gap-2 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
-                >
-                  <Download className="w-4 h-4" />
-                  Descarregar PDF
-                </button>
-             </div>
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => setViewState('list')} className="rounded-md border p-2 dark:border-slate-800">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div>
+                <h1 className="text-lg font-semibold">Detalhes do recibo</h1>
+                <p className="font-mono text-xs text-slate-500">{selectedReceipt.receiptNo}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => handleDownloadPdf(selectedReceipt)}
+              className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold dark:border-slate-800"
+            >
+              <Download className="h-4 w-4" />
+              Descarregar PDF
+            </button>
           </div>
 
-          <div className={`max-w-4xl mx-auto p-8 rounded-xl border ${theme === 'dark' ? 'bg-slate-950 border-slate-800 shadow-2xl shadow-indigo-500/5' : 'bg-white border-slate-200 shadow-xl'}`}>
-             <div className="flex justify-between items-start mb-8">
-                <div className="flex items-center gap-4">
-                  <div className="h-14 w-14 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-2xl">
-                    RE
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-black tracking-tight">{currentTenant.name}</h2>
-                    <p className="text-xs text-slate-500 font-mono">NIF: {currentTenant.nif}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-2xl font-mono font-black block tracking-tighter">RECIBO</span>
-                  <span className="text-sm font-mono font-bold text-slate-500">{selectedReceipt.receiptNo}</span>
-                  <div className="mt-2">{renderStatusBadge(selectedReceipt.status)}</div>
-                </div>
-             </div>
-
-             <div className="grid grid-cols-2 gap-8 py-8 border-y border-slate-100 dark:border-slate-900 mb-8">
+          <div className={`mx-auto max-w-4xl rounded-lg border p-6 shadow-sm ${cardClass(theme)}`}>
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-indigo-600 text-xl font-semibold text-white">RC</div>
                 <div>
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Cliente</h4>
-                  <p className="font-bold text-sm">{selectedReceipt.clientName}</p>
-                  <p className="text-xs text-slate-500 mt-1">Data de Emissão: {new Date(selectedReceipt.issueDate).toLocaleDateString()}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Método de Pagamento: {selectedReceipt.paymentMethod}</p>
+                  <h2 className="text-xl font-semibold">{currentTenant.name}</h2>
+                  <p className="font-mono text-xs text-slate-500">NIF: {currentTenant.nif}</p>
                 </div>
-                <div className="text-right">
-                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Resumo Financeiro</h4>
-                   <p className="text-3xl font-black text-slate-900 dark:text-white">
-                      {selectedReceipt.totalAmount.toLocaleString('pt-AO', { style: 'currency', currency: 'AOA' })}
-                   </p>
-                </div>
-             </div>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-semibold">RECIBO</div>
+                <div className="font-mono text-sm text-slate-500">{selectedReceipt.receiptNo}</div>
+                <div className="mt-2">{renderStatusBadge(selectedReceipt.status)}</div>
+              </div>
+            </div>
 
-             <div className="space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Documentos Liquidados</h4>
-                <table className="w-full text-left text-xs">
-                  <thead className="text-slate-400 border-b border-slate-100 dark:border-slate-900">
-                    <tr>
-                      <th className="py-2">Factura</th>
-                      <th className="py-2 text-right">Valor Pago</th>
+            <div className="mb-6 grid grid-cols-1 gap-6 border-y py-6 md:grid-cols-2 dark:border-slate-800">
+              <div>
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cliente</div>
+                <div className="font-semibold">{selectedReceipt.clientName}</div>
+                <div className="mt-1 text-xs text-slate-500">Data de emissão: {dateLabel(selectedReceipt.issueDate)}</div>
+                <div className="text-xs text-slate-500">Método: {methodLabel(selectedReceipt.paymentMethod)}</div>
+              </div>
+              <div className="md:text-right">
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Resumo financeiro</div>
+                <div className="text-3xl font-semibold">{money(selectedReceipt.totalAmount)}</div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Documentos liquidados</div>
+              <table className="w-full text-left text-sm">
+                <thead className="border-b text-xs text-slate-500 dark:border-slate-800">
+                  <tr>
+                    <th className="py-2">Factura</th>
+                    <th className="py-2 text-right">Valor pago</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {selectedReceipt.items.map((item) => (
+                    <tr key={item.id}>
+                      <td className="py-3 font-mono font-semibold">{item.invoiceNo}</td>
+                      <td className="py-3 text-right font-mono font-semibold text-indigo-600">{money(item.amountPaid)}</td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 dark:divide-slate-900/50">
-                    {selectedReceipt.items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="py-3 font-bold">{item.invoiceNo}</td>
-                        <td className="py-3 text-right font-mono font-bold text-indigo-600">
-                          {item.amountPaid.toLocaleString('pt-AO', { style: 'currency', currency: 'AOA' })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-             </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-             {selectedReceipt.receiptHash && (
-               <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-900 flex justify-between items-end">
-                  <div className="space-y-2 max-w-md">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Assinatura Digital Fiscal</span>
-                    <p className="text-[9px] font-mono text-slate-500 break-all bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-800">
-                      {selectedReceipt.receiptHash}
-                    </p>
-                    <p className="text-[8px] text-slate-400 italic">Validado pelo software {currentTenant.agtCertificateNo}</p>
-                  </div>
-                  {selectedReceipt.qrcodeString && (
-                    <div className="bg-white p-2 rounded border border-slate-200">
-                       <div className="w-20 h-20 bg-slate-100 flex items-center justify-center text-[10px] text-slate-400 text-center font-bold">
-                         QR CODE<br/>FISCAL
-                       </div>
-                    </div>
-                  )}
-               </div>
-             )}
+            {selectedReceipt.receiptHash && (
+              <div className="mt-8 flex flex-col gap-4 border-t pt-6 md:flex-row md:items-end md:justify-between dark:border-slate-800">
+                <div className="max-w-xl space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Assinatura digital fiscal</div>
+                  <p className={`break-all rounded border p-3 font-mono text-xs text-slate-500 ${softClass(theme)}`}>{selectedReceipt.receiptHash}</p>
+                  <p className="text-xs text-slate-500">Validado pelo software {currentTenant.agtCertificateNo || '---'}</p>
+                </div>
+                <div className="rounded border border-dashed p-4 text-center text-xs text-slate-500 dark:border-slate-700">
+                  <div className="flex h-20 w-20 items-center justify-center">QR AGT</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function methodLabel(method: PaymentMethod) {
+  const labels: Record<PaymentMethod, string> = {
+    NU: 'Numerário',
+    TB: 'Multicaixa',
+    CC: 'TPA / Cartão',
+    OU: 'Outro',
+    TR: 'Transferência',
+  };
+  return labels[method] || method;
+}
+
+function KpiCard({ title, value, hint, tone, theme }: { title: string; value: string; hint: string; tone: 'emerald' | 'amber' | 'indigo'; theme: string }) {
+  const toneClass = {
+    emerald: 'text-emerald-600',
+    amber: 'text-amber-600',
+    indigo: 'text-indigo-600',
+  }[tone];
+  return (
+    <div className={`rounded-lg border p-4 ${cardClass(theme)}`}>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</div>
+      <div className={`mt-2 text-2xl font-semibold ${toneClass}`}>{value}</div>
+      <div className="mt-1 text-xs text-slate-500">{hint}</div>
+    </div>
+  );
+}
+
+function SectionTitle({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
+  return (
+    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <Icon className="h-4 w-4" />
+      {label}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between py-1 ${strong ? 'text-base font-semibold' : 'text-sm text-slate-500'}`}>
+      <span>{label}</span>
+      <span className={`font-mono ${strong ? 'text-slate-900 dark:text-white' : ''}`}>{value}</span>
     </div>
   );
 }

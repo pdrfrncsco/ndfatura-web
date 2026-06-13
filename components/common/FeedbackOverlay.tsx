@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Loader2, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
 
 interface FeedbackOverlayProps {
     status: 'loading' | 'error' | 'success' | 'idle';
@@ -10,7 +10,7 @@ interface FeedbackOverlayProps {
 export const FeedbackOverlay: React.FC<FeedbackOverlayProps> = ({ status, message, onClose }) => {
     if (status === 'idle') return null;
 
-    const config = {
+    const configs: Record<Exclude<FeedbackOverlayProps['status'], 'idle'>, { icon: React.ReactNode; bg: string; textColor: string }> = {
         loading: {
             icon: <Loader2 className="h-10 w-10 text-blue-500 animate-spin" />,
             bg: 'bg-white/80 dark:bg-slate-950/80',
@@ -26,7 +26,8 @@ export const FeedbackOverlay: React.FC<FeedbackOverlayProps> = ({ status, messag
             bg: 'bg-emerald-50 dark:bg-emerald-950/90',
             textColor: 'text-emerald-700 dark:text-emerald-200'
         }
-    }[status] || config.loading;
+    };
+    const config = configs[status];
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">

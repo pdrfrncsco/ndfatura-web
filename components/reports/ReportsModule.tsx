@@ -84,7 +84,7 @@ export default function ReportsModule() {
         const fileName = `SAFT_AO_${saftMonth}_${saftYear}.xml`;
         await SaftService.downloadXml(exportedDetails.job_id, fileName);
     } catch (err) {
-        addNotification({ title: 'Erro no Download', desc: 'Ficheiro SAF-T ainda não está pronto ou erro no servidor.', type: 'error' });
+        addNotification({ title: 'Erro no Download', desc: 'Ficheiro SAF-T ainda não está pronto ou erro no servidor.', type: 'warning' });
     }
   };
 
