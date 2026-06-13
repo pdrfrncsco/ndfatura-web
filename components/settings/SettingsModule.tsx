@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
+import { TenantService } from '../../services/api';
 import { 
   Settings, 
   Building, 
@@ -110,6 +111,22 @@ export default function SettingsModule() {
         desc: 'O logotipo corporativo será exibido em todos os documentos.',
         type: 'success'
       });
+    }
+  };
+
+  const handleRotateKeys = async () => {
+    if (!confirm('Atenção: A rotação das chaves afectará o encadeamento dos hashes. Proceder apenas se instruído pela AGT. Deseja continuar?')) return;
+    try {
+        await TenantService.rotateKeys(currentTenant.id);
+        // Refresh session to get updated tenant profile
+        await useAuthStore.getState().bootstrapSession();
+        addNotification({
+            title: 'Chaves Rotacionadas',
+            desc: 'Um novo par de chaves RSA foi gerado com sucesso.',
+            type: 'success'
+        });
+    } catch (err) {
+        alert('Falha ao rotacionar chaves.');
     }
   };
 
@@ -406,15 +423,21 @@ export default function SettingsModule() {
                         <div className="p-5 bg-slate-900 rounded-2xl space-y-3">
                             <div className="flex justify-between items-center text-[10px]">
                                 <span className="text-slate-400 uppercase font-bold tracking-widest">Chave Pública RSA Registrada</span>
-                                <span className="text-blue-400 font-bold cursor-pointer hover:text-blue-300">Download .PEM</span>
+                                <span className="text-blue-400 font-bold cursor-pointer hover:text-blue-300" onClick={() => {
+                                    const blob = new Blob([currentTenant.softwarePublicKey || ''], { type: 'text/plain' });
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `${currentTenant.nif}_public_key.pem`;
+                                    a.click();
+                                }}>Download .PEM</span>
                             </div>
                             <div className="font-mono text-slate-500 text-[9px] break-all leading-relaxed line-clamp-4 bg-black/20 p-3 rounded-lg border border-white/5">
-                                -----BEGIN PUBLIC KEY-----
-                                MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA76M4v6v2...
+                                {currentTenant.softwarePublicKey || 'Nenhuma chave configurada. Clique em Rotacionar.'}
                             </div>
                         </div>
                         
-                        <button className="w-full py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2">
+                        <button onClick={handleRotateKeys} className="w-full py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2">
                             <RefreshCw className="h-4 w-4" />
                             Rotacionar Chaves de Segurança
                         </button>

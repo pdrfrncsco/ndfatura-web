@@ -113,6 +113,9 @@ export const TenantService = {
   update: async (id: string, data: Partial<Tenant>): Promise<Tenant> => {
     const response = await apiClient.patch<ApiEnvelope<Tenant>>(`/empresas/${id}/`, data);
     return unwrap(response);
+  },
+  rotateKeys: async (id: string): Promise<void> => {
+    await apiClient.post(`/empresas/${id}/rotate-keys/`);
   }
 };
 

@@ -20,6 +20,7 @@ export interface Tenant {
   systemName?: string;
   primaryColor?: string;
   agtCertificateNo?: string;
+  softwarePublicKey?: string;
 }
 
 export interface Estabelecimento {
