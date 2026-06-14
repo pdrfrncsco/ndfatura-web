@@ -150,6 +150,15 @@ export interface Invoice {
   notes: string;
   originDocumentId?: string;
   rectificationReason?: string;
+  
+  // Goods Movement (GR)
+  vehiclePlate?: string;
+  driverName?: string;
+  loadingPoint?: string;
+  deliveryPoint?: string;
+  loadingDate?: string;
+  deliveryDate?: string;
+
   tenantId: string;
   createdBy: string;
 }

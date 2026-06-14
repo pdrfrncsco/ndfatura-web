@@ -81,6 +81,8 @@ export default function InvoiceModule() {
     exchangeRates,
     addInvoice,
     issueInvoice,
+    convertInvoice,
+    fetchInvoices,
     validateInvoiceWithAGT,
   } = useDataStore();
 
