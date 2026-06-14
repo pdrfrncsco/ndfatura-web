@@ -257,6 +257,10 @@ export const InvoiceService = {
     const response = await apiClient.post<ApiEnvelope<Invoice>>(`/facturas/${id}/validar-agt/`);
     return unwrap(response);
   },
+  convert: async (id: string, targetType: 'FT' | 'FR'): Promise<Invoice> => {
+    const response = await apiClient.post<ApiEnvelope<Invoice>>(`/facturas/${id}/converter/`, { type: targetType });
+    return unwrap(response);
+  },
   sendEmail: async (id: string): Promise<void> => {
     await apiClient.post(`/facturas/${id}/enviar-email/`);
   },

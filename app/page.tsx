@@ -16,13 +16,15 @@ import ReportsModule from '../components/reports/ReportsModule';
 import UsersModule from '../components/users/UsersModule';
 import AuditLogsView from '../components/audit/AuditLogsView';
 import SettingsModule from '../components/settings/SettingsModule';
+import { OnboardingWizard } from '../components/onboarding/OnboardingWizard';
 import { hasAccessToken } from '../services/api';
 
 function ApplicationShell() {
   const router = useRouter();
   const { currentScreen, isAuthenticated, bootstrapSession, currentTenant, theme } = useAuthStore();
-  const { loadTenantData, isLoadingRemoteData, remoteDataError } = useDataStore();
+  const { loadTenantData, isLoadingRemoteData, remoteDataError, products, estabelecimentos } = useDataStore();
   const [isInitializing, setIsInitializing] = React.useState(true);
+  const [showOnboarding, setShowOnboarding] = React.useState(false);
 
   React.useEffect(() => {
     const init = async () => {
@@ -42,9 +44,22 @@ function ApplicationShell() {
 
   React.useEffect(() => {
     if (isAuthenticated && currentTenant) {
-      loadTenantData(currentTenant.id);
+      loadTenantData(currentTenant.id).then(() => {
+        // Trigger onboarding if no products or establishments configured
+        // (Assuming loadTenantData updates the store with actual counts)
+      });
     }
   }, [currentTenant, isAuthenticated, loadTenantData]);
+
+  // Secondary effect to check onboarding after data is loaded
+  React.useEffect(() => {
+    if (isAuthenticated && currentTenant && !isLoadingRemoteData) {
+      const needsOnboarding = products.length === 0 || estabelecimentos.length === 0;
+      if (needsOnboarding) {
+        setShowOnboarding(true);
+      }
+    }
+  }, [isAuthenticated, currentTenant, isLoadingRemoteData, products.length, estabelecimentos.length]);
 
   const mainBg = theme === 'dark' 
     ? 'bg-[#0B0F19] text-slate-100' 
@@ -62,6 +77,8 @@ function ApplicationShell() {
   return (
     <div className={`min-h-screen flex ${theme === 'dark' ? 'dark bg-slate-950 text-slate-100' : 'bg-[#F8FAFC] text-slate-900'} transition-all font-sans relative overflow-hidden`}>
       
+      {showOnboarding && <OnboardingWizard onComplete={() => setShowOnboarding(false)} />}
+
       {/* Sidebar collapsible left drawer (Fixed on mobile, Relative on desktop) */}
       <Sidebar />
 

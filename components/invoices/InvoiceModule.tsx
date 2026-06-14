@@ -21,6 +21,7 @@ import {
   FileText,
   Mail,
   Plus,
+  Printer,
   RefreshCcw,
   Search,
   Send,
@@ -30,6 +31,7 @@ import {
   X,
 } from 'lucide-react';
 import { FeedbackOverlay } from '../common/FeedbackOverlay';
+import { InvoicePrintView } from './InvoicePrintView';
 
 function generateFaturaDates(type: InvoiceType) {
   const today = new Date();
@@ -315,6 +317,19 @@ export default function InvoiceModule() {
     }
   };
 
+  const handleConvertProforma = async (targetType: 'FT' | 'FR') => {
+    if (!selectedInvoice) return;
+    try {
+      setFeedback({ status: 'loading', message: 'A converter proforma...' });
+      const newInvoice = await convertInvoice(selectedInvoice.id, targetType);
+      setFeedback({ status: 'success', message: 'Convertido com sucesso!' });
+      setSelectedInvoice(newInvoice);
+      fetchInvoices();
+    } catch (e) {
+      setFeedback({ status: 'error', message: 'Falha na conversão.' });
+    }
+  };
+
   const handleDownloadPdf = async (invoice: Invoice) => {
     try {
       const fileName = `${invoice.invoiceNo?.replace(/\//g, '_') || 'factura'}.pdf`;
@@ -574,6 +589,7 @@ export default function InvoiceModule() {
                     ['FR', 'Fact. recibo'],
                     ['NC', 'N. crédito'],
                     ['VD', 'Venda dinheiro'],
+                    ['PP', 'Proforma'],
                   ].map(([value, label]) => (
                     <button
                       key={value}
@@ -861,12 +877,19 @@ export default function InvoiceModule() {
 
             <SectionTitle icon={FileCheck2} label="Acções" />
             <div className="space-y-2">
-              {selectedInvoice.status === 'Draft' && (
+              {selectedInvoice.type === 'PP' && selectedInvoice.status === 'Draft' && (
+                <>
+                  <ActionButton onClick={() => handleConvertProforma('FT')} icon={FileText} label="Converter em FT" tone="success" />
+                  <ActionButton onClick={() => handleConvertProforma('FR')} icon={CheckCircle2} label="Converter em FR" tone="success" />
+                </>
+              )}
+              {selectedInvoice.status === 'Draft' && selectedInvoice.type !== 'PP' && (
                 <ActionButton onClick={() => handleIssueInvoice(selectedInvoice.id)} icon={FileCheck2} label={isIssuing ? 'A emitir...' : 'Emitir fiscalmente'} tone="success" />
               )}
               {(selectedInvoice.status === 'Issued' || selectedInvoice.status === 'AGT_Error') && (
                 <ActionButton onClick={() => handleValidateAGT(selectedInvoice.id)} icon={RefreshCcw} label={isSyncing ? 'A validar...' : 'Re-sincronizar AGT'} />
               )}
+              <ActionButton onClick={() => window.print()} icon={Printer} label="Imprimir (A4)" />
               <ActionButton onClick={() => handleDownloadPdf(selectedInvoice)} icon={Download} label="Descarregar PDF" />
               <ActionButton onClick={() => handleSendEmail(selectedInvoice.id)} icon={Mail} label="Reenviar ao cliente" />
               <ActionButton onClick={() => addNotification({ title: 'Duplicação', desc: 'Use a criação de factura para emitir novo documento.', type: 'info' })} icon={Copy} label="Duplicar factura" />
@@ -897,6 +920,15 @@ export default function InvoiceModule() {
         }
       `}</style>
       <FeedbackOverlay status={feedback.status} message={feedback.message} onClose={() => setFeedback({ status: 'idle', message: '' })} />
+      
+      {/* Printable Area - Hidden on screen, shown on print */}
+      <div className="hidden print:block fixed inset-0 z-[9999] bg-white" id="printable-invoice-canvas">
+        <InvoicePrintView 
+          invoice={selectedInvoice} 
+          tenant={currentTenant} 
+          branch={estabelecimentos.find(e => e.id === selectedInvoice?.estabelecimentoId)}
+        />
+      </div>
     </div>
   );
 }

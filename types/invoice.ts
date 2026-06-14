@@ -99,7 +99,7 @@ export interface Client {
   tenantId: string;
 }
 
-export type InvoiceType = 'FT' | 'FR' | 'NC' | 'VD';
+export type InvoiceType = 'FT' | 'FR' | 'NC' | 'VD' | 'PP';
 export type InvoiceStatus = 'Draft' | 'Issued' | 'Paid' | 'Partial' | 'Cancelled' | 'AGT_Synced' | 'AGT_Error';
 
 export interface InvoiceItem {

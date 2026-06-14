@@ -64,6 +64,7 @@ interface DataState {
   addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceHash' | 'qrcodeString'>) => Promise<Invoice>;
   issueInvoice: (id: string) => Promise<Invoice>;
   cancelInvoice: (id: string, reason: string) => Promise<Invoice>;
+  convertInvoice: (id: string, targetType: 'FT' | 'FR') => Promise<Invoice>;
   updateInvoiceStatus: (id: string, status: Invoice['status']) => void;
   syncInvoiceWithAGT: (id: string) => Promise<void>;
   validateInvoiceWithAGT: (id: string) => Promise<void>;
@@ -367,6 +368,20 @@ export const useDataStore = create<DataState>((set, get) => ({
       return cancelledInvoice;
     } catch (error) {
       set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao cancelar documento fiscal na API.' });
+      throw error;
+    }
+  },
+
+  convertInvoice: async (id, targetType) => {
+    set({ remoteDataError: null });
+    try {
+      const newInvoice = await InvoiceService.convert(id, targetType);
+      const updated = [newInvoice, ...get().invoices];
+      set({ invoices: updated });
+      setStorageItem('ndf_invoices', updated);
+      return newInvoice;
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao converter Proforma em Factura.' });
       throw error;
     }
   },
