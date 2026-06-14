@@ -99,6 +99,16 @@ export interface Client {
   tenantId: string;
 }
 
+export interface MulticaixaReference {
+  id: string;
+  entityCode: string;
+  referenceNumber: string;
+  amount: number;
+  status: 'PENDING' | 'PAID' | 'EXPIRED' | 'CANCELLED';
+  expiresAt?: string;
+  paidAt?: string;
+}
+
 export type InvoiceType = 'FT' | 'FR' | 'NC' | 'VD' | 'PP' | 'GR' | 'ND';
 export type InvoiceStatus = 'Draft' | 'Issued' | 'Paid' | 'Partial' | 'Cancelled' | 'AGT_Synced' | 'AGT_Error';
 
@@ -161,6 +171,7 @@ export interface Invoice {
 
   tenantId: string;
   createdBy: string;
+  multicaixaReference?: MulticaixaReference;
 }
 
 export interface AuditLog {

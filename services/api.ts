@@ -261,6 +261,10 @@ export const InvoiceService = {
     const response = await apiClient.post<ApiEnvelope<Invoice>>(`/facturas/${id}/converter/`, { type: targetType });
     return unwrap(response);
   },
+  generateMulticaixaReference: async (id: string): Promise<MulticaixaReference> => {
+    const response = await apiClient.post<ApiEnvelope<MulticaixaReference>>(`/facturas/${id}/multicaixa-referencia/`);
+    return unwrap(response);
+  },
   sendEmail: async (id: string): Promise<void> => {
     await apiClient.post(`/facturas/${id}/enviar-email/`);
   },

@@ -121,6 +121,40 @@ export default function PublicInvoicePage() {
             <InvoicePrintView invoice={invoice} tenant={tenant} />
           </div>
         </div>
+
+        {/* Public Payment Box */}
+        {invoice.status !== 'Paid' && invoice.multicaixaReference && (
+          <div className="mt-8 bg-blue-600 rounded-2xl p-6 text-white shadow-xl shadow-blue-500/20 animate-in slide-in-from-bottom-2 duration-500">
+            <div className="flex items-center gap-3 mb-6">
+              <Landmark className="h-6 w-6" />
+              <h3 className="text-lg font-bold tracking-tight">Pagar via Multicaixa Express</h3>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/10">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-blue-100 mb-1">Entidade</p>
+                <p className="text-2xl font-mono font-black">{invoice.multicaixaReference.entityCode}</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/10">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-blue-100 mb-1">Referência</p>
+                <p className="text-2xl font-mono font-black">
+                  {invoice.multicaixaReference.referenceNumber?.match(/.{1,3}/g)?.join(' ') || invoice.multicaixaReference.referenceNumber}
+                </p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/10">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-blue-100 mb-1">Montante</p>
+                <p className="text-2xl font-mono font-black">
+                  {invoice.grandTotal.toLocaleString('pt-AO')} <span className="text-sm font-bold">AOA</span>
+                </p>
+              </div>
+            </div>
+            
+            <div className="mt-6 flex items-start gap-3 text-xs text-blue-100/80 leading-relaxed">
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              <p>Após efectuar o pagamento no seu banco ou aplicativo Multicaixa Express, a factura será liquidada automaticamente e o recibo enviado para o seu e-mail.</p>
+            </div>
+          </div>
+        )}
         
         {/* Footer info */}
         <footer className="mt-8 text-center">

@@ -71,6 +71,7 @@ interface DataState {
   updateInvoiceStatus: (id: string, status: Invoice['status']) => void;
   syncInvoiceWithAGT: (id: string) => Promise<void>;
   validateInvoiceWithAGT: (id: string) => Promise<void>;
+  generateMulticaixaReference: (id: string) => Promise<Invoice>;
   addAuditLog: (log: Omit<AuditLog, 'id' | 'timestamp'>) => void;
   
   // Actions for Recurring Invoices
@@ -439,6 +440,21 @@ export const useDataStore = create<DataState>((set, get) => ({
       setStorageItem('ndf_invoices', updated);
     } catch (error) {
       set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao validar documento na AGT.' });
+      throw error;
+    }
+  },
+
+  generateMulticaixaReference: async (id) => {
+    set({ remoteDataError: null });
+    try {
+      await InvoiceService.generateMulticaixaReference(id);
+      const updatedInvoice = await InvoiceService.getById(id);
+      const updated = get().invoices.map((i) => (i.id === id ? updatedInvoice : i));
+      set({ invoices: updated });
+      setStorageItem('ndf_invoices', updated);
+      return updatedInvoice;
+    } catch (error) {
+      set({ remoteDataError: error instanceof Error ? error.message : 'Falha ao gerar referência Multicaixa.' });
       throw error;
     }
   },

@@ -85,6 +85,7 @@ export default function InvoiceModule() {
     issueInvoice,
     convertInvoice,
     fetchInvoices,
+    generateMulticaixaReference,
     validateInvoiceWithAGT,
   } = useDataStore();
 
@@ -353,6 +354,51 @@ export default function InvoiceModule() {
       fetchInvoices();
     } catch (e) {
       setFeedback({ status: 'error', message: 'Falha na conversão.' });
+    }
+  };
+
+  const handleDuplicateInvoice = () => {
+    if (!selectedInvoice) return;
+    setInvoiceType(selectedInvoice.type);
+    setSelectedClientId(selectedInvoice.clientId);
+    setCurrency(selectedInvoice.currency);
+    setExchangeRate(selectedInvoice.exchangeRate);
+    setWithholdingEnabled(selectedInvoice.withholdingTaxRate > 0);
+    setNotes(`Duplicado de ${selectedInvoice.invoiceNo}\n${selectedInvoice.notes}`);
+    setInvoiceItems(selectedInvoice.items.map(item => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      price: item.price,
+      discountPercent: item.discount
+    })));
+    setViewState('create');
+    addNotification({ title: 'Dados Copiados', desc: 'O formulário foi preenchido com os dados da factura seleccionada.', type: 'info' });
+  };
+
+  const handleCancelWithNC = () => {
+    if (!selectedInvoice) return;
+    setInvoiceType('NC');
+    setSelectedClientId(selectedInvoice.clientId);
+    setOriginDocumentId(selectedInvoice.id);
+    setRectificationReason(`Anulação total da factura ${selectedInvoice.invoiceNo}`);
+    setInvoiceItems(selectedInvoice.items.map(item => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      price: item.price,
+      discountPercent: item.discount
+    })));
+    setViewState('create');
+    addNotification({ title: 'Nota de Crédito', desc: 'Preparada anulação total para este documento.', type: 'info' });
+  };
+
+  const handleGenerateMulticaixa = async (id: string) => {
+    setFeedback({ status: 'loading', message: 'Solicitando referência de pagamento...' });
+    try {
+      const result = await generateMulticaixaReference(id);
+      setSelectedInvoice(result);
+      setFeedback({ status: 'success', message: 'Referência gerada com sucesso.' });
+    } catch (err) {
+      setFeedback({ status: 'error', message: err instanceof Error ? err.message : 'Erro ao gerar referência.' });
     }
   };
 
@@ -993,6 +1039,51 @@ export default function InvoiceModule() {
               </div>
             </div>
 
+            {selectedInvoice.status !== 'Draft' && selectedInvoice.type !== 'GR' && (
+              <div className={`mt-6 rounded-xl border p-5 ${selectedInvoice.multicaixaReference?.status === 'PAID' ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-blue-500/5 border-blue-500/20'}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Landmark className={`h-5 w-5 ${selectedInvoice.multicaixaReference?.status === 'PAID' ? 'text-emerald-500' : 'text-blue-500'}`} />
+                    <h3 className="text-sm font-bold uppercase tracking-wider">Pagamento Multicaixa Express</h3>
+                  </div>
+                  {selectedInvoice.multicaixaReference?.status === 'PAID' ? (
+                    <span className="px-2 py-1 bg-emerald-500 text-white text-[10px] font-bold rounded uppercase">Pago</span>
+                  ) : (
+                    <span className="px-2 py-1 bg-blue-500 text-white text-[10px] font-bold rounded uppercase">Disponível</span>
+                  )}
+                </div>
+
+                {selectedInvoice.multicaixaReference ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 text-center">
+                      <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Entidade</p>
+                      <p className="text-lg font-mono font-black tracking-widest">{selectedInvoice.multicaixaReference.entityCode}</p>
+                    </div>
+                    <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 text-center">
+                      <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Referência</p>
+                      <p className="text-lg font-mono font-black tracking-widest text-blue-600">
+                        {selectedInvoice.multicaixaReference.referenceNumber?.match(/.{1,3}/g)?.join(' ') || selectedInvoice.multicaixaReference.referenceNumber}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 text-center">
+                      <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Montante</p>
+                      <p className="text-lg font-mono font-black tracking-tight">{money(selectedInvoice.multicaixaReference.amount, selectedInvoice.currency)}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-4 text-center">
+                    <p className="text-xs text-slate-500 mb-3">Gere uma referência para permitir o pagamento imediato via Multicaixa.</p>
+                    <button 
+                      onClick={() => handleGenerateMulticaixa(selectedInvoice.id)}
+                      className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-full shadow-lg shadow-blue-500/20 transition-all"
+                    >
+                      Gerar Referência de Pagamento
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {selectedInvoice.invoiceHash && (
               <div className={`mt-5 rounded-lg border p-3 ${softClass(theme)}`}>
                 <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-600">
@@ -1039,8 +1130,8 @@ export default function InvoiceModule() {
               />
               <ActionButton onClick={() => handleDownloadPdf(selectedInvoice)} icon={Download} label="Descarregar PDF" />
               <ActionButton onClick={() => handleSendEmail(selectedInvoice.id)} icon={Mail} label="Reenviar ao cliente" />
-              <ActionButton onClick={() => addNotification({ title: 'Duplicação', desc: 'Use a criação de factura para emitir novo documento.', type: 'info' })} icon={Copy} label="Duplicar factura" />
-              <ActionButton onClick={() => addNotification({ title: 'Anulação', desc: 'Emita uma Nota de Crédito para anular o documento.', type: 'warning' })} icon={X} label="Anular (Nota de Crédito)" tone="danger" />
+              <ActionButton onClick={handleDuplicateInvoice} icon={Copy} label="Duplicar factura" />
+              <ActionButton onClick={handleCancelWithNC} icon={X} label="Anular (Nota de Crédito)" tone="danger" />
             </div>
 
             <SectionTitle icon={QrIcon} label="QR Code fiscal" />
