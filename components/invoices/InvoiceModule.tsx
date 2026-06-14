@@ -38,9 +38,11 @@ function generateFaturaDates(type: InvoiceType) {
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
   const dueDate = new Date();
-  dueDate.setDate(today.getDate() + (type === 'FR' ? 0 : 30));
+  // FR (Factura-Recibo) and VD (Venda a Dinheiro) are cash documents (immediate payment)
+  const isImmediate = type === 'FR' || type === 'VD';
+  dueDate.setDate(today.getDate() + (isImmediate ? 0 : 30));
   const dueDateStr = dueDate.toISOString().split('T')[0];
-  return { todayStr, dueDateStr };
+  return { todayStr, dueDateStr, isImmediate };
 }
 
 const toAmount = (value: unknown) => {
@@ -668,18 +670,32 @@ export default function InvoiceModule() {
                   <Field label="Data de emissão">
                     <input readOnly value={generateFaturaDates(invoiceType).todayStr} className={`field-input ${softClass(theme)}`} />
                   </Field>
-                  <Field label="Data de vencimento">
-                    <input readOnly value={generateFaturaDates(invoiceType).dueDateStr} className={`field-input ${softClass(theme)}`} />
-                  </Field>
+                  {!generateFaturaDates(invoiceType).isImmediate ? (
+                    <Field label="Data de vencimento">
+                      <input readOnly value={generateFaturaDates(invoiceType).dueDateStr} className={`field-input ${softClass(theme)}`} />
+                    </Field>
+                  ) : (
+                    <Field label="Vencimento">
+                      <div className="flex h-10 items-center rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 text-sm font-semibold text-emerald-600">
+                        Pronto Pagamento
+                      </div>
+                    </Field>
+                  )}
                   <Field label="Retenção na fonte">
-                    <select
-                      value={withholdingEnabled ? '6.5' : '0'}
-                      onChange={(e) => setWithholdingEnabled(e.target.value !== '0')}
-                      className={`field-input ${softClass(theme)}`}
-                    >
-                      <option value="0">Nenhuma</option>
-                      <option value="6.5">6,5% - Serviços</option>
-                    </select>
+                    {invoiceType !== 'GR' ? (
+                      <select
+                        value={withholdingEnabled ? '6.5' : '0'}
+                        onChange={(e) => setWithholdingEnabled(e.target.value !== '0')}
+                        className={`field-input ${softClass(theme)}`}
+                      >
+                        <option value="0">Nenhuma</option>
+                        <option value="6.5">6,5% - Serviços</option>
+                      </select>
+                    ) : (
+                      <div className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-xs text-slate-400 dark:border-slate-800 dark:bg-slate-900/50">
+                        Não aplicável
+                      </div>
+                    )}
                   </Field>
                 </div>
               </section>
@@ -742,22 +758,26 @@ export default function InvoiceModule() {
 
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <SectionTitle icon={FileCheck2} label="Itens da factura" />
+                  <SectionTitle icon={FileCheck2} label={invoiceType === 'GR' ? 'Artigos a transportar' : 'Itens da factura'} />
                   <button type="button" onClick={handleAddLine} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600">
                     <Plus className="h-3.5 w-3.5" />
                     Adicionar item
                   </button>
                 </div>
-                <div className="hidden grid-cols-[1fr_76px_120px_90px_36px] gap-2 border-b pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 md:grid dark:border-slate-800">
+                <div className={`hidden gap-2 border-b pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 md:grid dark:border-slate-800 ${invoiceType === 'GR' ? 'grid-cols-[1fr_80px_36px]' : 'grid-cols-[1fr_76px_120px_90px_36px]'}`}>
                   <span>Produto / serviço</span>
                   <span>Qtd</span>
-                  <span>Preço unit.</span>
-                  <span>Desc.</span>
+                  {invoiceType !== 'GR' && (
+                    <>
+                      <span>Preço unit.</span>
+                      <span>Desc.</span>
+                    </>
+                  )}
                   <span />
                 </div>
                 <div className="space-y-2">
                   {invoiceItems.map((item, idx) => (
-                    <div key={idx} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_76px_120px_90px_36px]">
+                    <div key={idx} className={`grid grid-cols-1 gap-2 ${invoiceType === 'GR' ? 'md:grid-cols-[1fr_80px_36px]' : 'md:grid-cols-[1fr_76px_120px_90px_36px]'}`}>
                       <select
                         value={item.productId}
                         onChange={(e) => handleItemChange(idx, 'productId', e.target.value)}
@@ -766,7 +786,7 @@ export default function InvoiceModule() {
                         <option value="">Escolher produto...</option>
                         {tenantProducts.map((product) => (
                           <option key={product.id} value={product.id}>
-                            {product.name} ({product.taxRate}% IVA)
+                            {product.name} {invoiceType !== 'GR' ? `(${product.taxRate}% IVA)` : ''}
                           </option>
                         ))}
                       </select>
@@ -777,22 +797,26 @@ export default function InvoiceModule() {
                         onChange={(e) => handleItemChange(idx, 'quantity', Number(e.target.value))}
                         className={`field-input text-center ${softClass(theme)}`}
                       />
-                      <input
-                        type="number"
-                        min={0}
-                        value={item.price || ''}
-                        placeholder="Preço"
-                        onChange={(e) => handleItemChange(idx, 'price', Number(e.target.value))}
-                        className={`field-input font-mono ${softClass(theme)}`}
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={item.discountPercent}
-                        onChange={(e) => handleItemChange(idx, 'discountPercent', Number(e.target.value))}
-                        className={`field-input font-mono ${softClass(theme)}`}
-                      />
+                      {invoiceType !== 'GR' && (
+                        <>
+                          <input
+                            type="number"
+                            min={0}
+                            value={item.price || ''}
+                            placeholder="Preço"
+                            onChange={(e) => handleItemChange(idx, 'price', Number(e.target.value))}
+                            className={`field-input font-mono ${softClass(theme)}`}
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={item.discountPercent}
+                            onChange={(e) => handleItemChange(idx, 'discountPercent', Number(e.target.value))}
+                            className={`field-input font-mono ${softClass(theme)}`}
+                          />
+                        </>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleRemoveLine(idx)}
@@ -807,22 +831,26 @@ export default function InvoiceModule() {
               </section>
 
               <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <Field label="Documento de origem">
-                  <input
-                    value={originDocumentId}
-                    onChange={(e) => setOriginDocumentId(e.target.value)}
-                    placeholder="Obrigatório para rectificativas"
-                    className={`field-input ${softClass(theme)}`}
-                  />
-                </Field>
-                <Field label="Motivo de rectificação">
-                  <input
-                    value={rectificationReason}
-                    onChange={(e) => setRectificationReason(e.target.value)}
-                    placeholder="Ex: devolução parcial"
-                    className={`field-input ${softClass(theme)}`}
-                  />
-                </Field>
+                {(invoiceType === 'NC' || invoiceType === 'ND') && (
+                  <>
+                    <Field label="Documento de origem">
+                      <input
+                        value={originDocumentId}
+                        onChange={(e) => setOriginDocumentId(e.target.value)}
+                        placeholder="Ex: FT SEDE2024/0001"
+                        className={`field-input ${softClass(theme)}`}
+                      />
+                    </Field>
+                    <Field label="Motivo de rectificação">
+                      <input
+                        value={rectificationReason}
+                        onChange={(e) => setRectificationReason(e.target.value)}
+                        placeholder="Ex: erro no preço, devolução..."
+                        className={`field-input ${softClass(theme)}`}
+                      />
+                    </Field>
+                  </>
+                )}
                 <div className="md:col-span-2">
                   <Field label="Observações">
                     <textarea
@@ -848,15 +876,25 @@ export default function InvoiceModule() {
 
             <aside className={`space-y-5 border-t p-5 lg:border-l lg:border-t-0 ${theme === 'dark' ? 'border-slate-800 bg-slate-900/40' : 'border-slate-200 bg-slate-50'}`}>
               <SectionTitle icon={CheckCircle2} label="Resumo" />
-              <div className={`rounded-lg border p-4 ${cardClass(theme)}`}>
-                <SummaryRow label={`Subtotal (${calculatedItems.length} itens)`} value={money(liveSubtotal, currency)} />
-                <SummaryRow label="Desconto" value={money(liveDiscountTotal, currency)} />
-                <SummaryRow label="IVA" value={money(liveTaxTotal, currency)} />
-                <SummaryRow label="Retenção" value={`- ${money(liveWithholding, currency)}`} danger />
-                <div className="mt-3 border-t pt-3 dark:border-slate-800">
-                  <SummaryRow label="Total a pagar" value={money(liveGrandTotal, currency)} strong />
+              {invoiceType !== 'GR' ? (
+                <div className={`rounded-lg border p-4 ${cardClass(theme)}`}>
+                  <SummaryRow label={`Subtotal (${calculatedItems.length} itens)`} value={money(liveSubtotal, currency)} />
+                  <SummaryRow label="Desconto" value={money(liveDiscountTotal, currency)} />
+                  <SummaryRow label="IVA" value={money(liveTaxTotal, currency)} />
+                  <SummaryRow label="Retenção" value={`- ${money(liveWithholding, currency)}`} danger />
+                  <div className="mt-3 border-t pt-3 dark:border-slate-800">
+                    <SummaryRow label="Total a pagar" value={money(liveGrandTotal, currency)} strong />
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className={`rounded-lg border p-4 ${cardClass(theme)}`}>
+                  <div className="text-center py-2 text-slate-500">
+                    <Landmark className="mx-auto h-8 w-8 opacity-20 mb-2" />
+                    <p className="text-sm font-semibold">Guia de Remessa</p>
+                    <p className="text-[11px]">Documento de transporte sem valor financeiro imediato.</p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-start gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-emerald-700 dark:text-emerald-400">
                 <Wifi className="mt-0.5 h-4 w-4" />
                 <div>
@@ -943,11 +981,15 @@ export default function InvoiceModule() {
             </div>
 
             <div className="mt-5 border-t pt-4 dark:border-slate-800">
-              <SummaryRow label="Subtotal" value={money(selectedInvoice.subtotal, selectedInvoice.currency)} />
-              <SummaryRow label="IVA" value={money(selectedInvoice.taxTotal, selectedInvoice.currency)} />
-              <SummaryRow label={`Retenção (${selectedInvoice.withholdingTaxRate || 0}%)`} value={`- ${money(selectedInvoice.withholdingTaxAmount || 0, selectedInvoice.currency)}`} danger />
+              <SummaryRow label={selectedInvoice.type === 'GR' ? "Total da Mercadoria" : "Subtotal"} value={money(selectedInvoice.subtotal, selectedInvoice.currency)} />
+              {selectedInvoice.type !== 'GR' && (
+                <>
+                  <SummaryRow label="IVA" value={money(selectedInvoice.taxTotal, selectedInvoice.currency)} />
+                  <SummaryRow label={`Retenção (${selectedInvoice.withholdingTaxRate || 0}%)`} value={`- ${money(selectedInvoice.withholdingTaxAmount || 0, selectedInvoice.currency)}`} danger />
+                </>
+              )}
               <div className="mt-2 border-t pt-2 dark:border-slate-800">
-                <SummaryRow label="Total" value={money(selectedInvoice.grandTotal, selectedInvoice.currency)} strong />
+                <SummaryRow label={selectedInvoice.type === 'GR' ? "Total Declarado" : "Total"} value={money(selectedInvoice.grandTotal, selectedInvoice.currency)} strong />
               </div>
             </div>
 
