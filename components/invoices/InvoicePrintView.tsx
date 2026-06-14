@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Invoice, Tenant, Estabelecimento } from '../../types/invoice';
+import { Landmark } from 'lucide-react';
 
 interface InvoicePrintViewProps {
   invoice: Invoice | null;
@@ -21,7 +22,7 @@ export function InvoicePrintView({ invoice, tenant, branch }: InvoicePrintViewPr
   if (!invoice || !tenant) return null;
 
   // Find branch if not provided but exists in invoice
-  const branchInfo = branch || null; // In a real scenario we'd find it from data store if needed
+  const branchInfo = branch || null; 
 
   const getDocTypeLabel = (type: string) => {
     switch (type) {
@@ -30,6 +31,8 @@ export function InvoicePrintView({ invoice, tenant, branch }: InvoicePrintViewPr
       case 'NC': return 'NOTA DE CRÉDITO';
       case 'VD': return 'VENDA A DINHEIRO';
       case 'ND': return 'NOTA DE DÉBITO';
+      case 'GR': return 'GUIA DE REMESSA';
+      case 'PP': return 'PROFORMA';
       default: return type;
     }
   };
@@ -84,9 +87,43 @@ export function InvoicePrintView({ invoice, tenant, branch }: InvoicePrintViewPr
           <p className="text-sm font-semibold mt-1">NIF: {invoice.clientNif}</p>
         </div>
         <div className="text-right flex flex-col justify-end">
-           {/* Placeholder for potential client extra info like phone */}
         </div>
       </div>
+
+      {/* Goods Movement Details (Only if GR or has data) */}
+      {(invoice.type === 'GR' || invoice.vehiclePlate) && (
+        <div className="mb-8 p-4 border border-slate-200 rounded-lg">
+          <h3 className="text-xs font-bold uppercase text-slate-500 mb-3 flex items-center gap-2">
+            <Landmark className="h-3 w-3" /> Detalhes da Circulação de Mercadorias
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+            <div>
+              <p className="text-slate-500 uppercase font-semibold text-[9px]">Viatura (Matrícula)</p>
+              <p className="font-bold">{invoice.vehiclePlate || '---'}</p>
+            </div>
+            <div>
+              <p className="text-slate-500 uppercase font-semibold text-[9px]">Motorista</p>
+              <p className="font-bold">{invoice.driverName || '---'}</p>
+            </div>
+            <div>
+              <p className="text-slate-500 uppercase font-semibold text-[9px]">Carga (Data/Hora)</p>
+              <p className="font-bold">{invoice.loadingDate ? new Date(invoice.loadingDate).toLocaleString('pt-AO') : '---'}</p>
+            </div>
+            <div>
+              <p className="text-slate-500 uppercase font-semibold text-[9px]">Descarga (Prevista)</p>
+              <p className="font-bold">{invoice.deliveryDate ? new Date(invoice.deliveryDate).toLocaleString('pt-AO') : '---'}</p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-slate-500 uppercase font-semibold text-[9px]">Ponto de Carga</p>
+              <p className="">{invoice.loadingPoint || '---'}</p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-slate-500 uppercase font-semibold text-[9px]">Ponto de Descarga</p>
+              <p className="">{invoice.deliveryPoint || '---'}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Items Table */}
       <table className="w-full mb-8 text-sm">

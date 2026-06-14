@@ -19,6 +19,7 @@ import {
   Download,
   FileCheck2,
   FileText,
+  Landmark,
   Mail,
   Plus,
   Printer,
@@ -108,6 +109,15 @@ export default function InvoiceModule() {
   const [notes, setNotes] = React.useState('');
   const [originDocumentId, setOriginDocumentId] = React.useState('');
   const [rectificationReason, setRectificationReason] = React.useState('');
+  
+  // Goods Movement (GR)
+  const [vehiclePlate, setVehiclePlate] = React.useState('');
+  const [driverName, setDriverName] = React.useState('');
+  const [loadingPoint, setLoadingPoint] = React.useState('');
+  const [deliveryPoint, setDeliveryPoint] = React.useState('');
+  const [loadingDate, setLoadingDate] = React.useState('');
+  const [deliveryDate, setDeliveryDate] = React.useState('');
+
   const [isSavingDraft, setIsSavingDraft] = React.useState(false);
   const [isIssuing, setIsIssuing] = React.useState(false);
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
@@ -209,6 +219,12 @@ export default function InvoiceModule() {
     setNotes('');
     setOriginDocumentId('');
     setRectificationReason('');
+    setVehiclePlate('');
+    setDriverName('');
+    setLoadingPoint('');
+    setDeliveryPoint('');
+    setLoadingDate('');
+    setDeliveryDate('');
     setInvoiceItems([{ productId: '', quantity: 1, discountPercent: 0, price: 0 }]);
     setFormErrors({});
   };
@@ -263,6 +279,12 @@ export default function InvoiceModule() {
         notes,
         originDocumentId: originDocumentId || undefined,
         rectificationReason: rectificationReason || undefined,
+        vehiclePlate: vehiclePlate || undefined,
+        driverName: driverName || undefined,
+        loadingPoint: loadingPoint || undefined,
+        deliveryPoint: deliveryPoint || undefined,
+        loadingDate: loadingDate || undefined,
+        deliveryDate: deliveryDate || undefined,
       };
       const result = await addInvoice(payload);
       addNotification({ title: 'Rascunho Gravado', desc: 'Rascunho preparado para emissão fiscal.', type: 'info' });
@@ -590,6 +612,7 @@ export default function InvoiceModule() {
                     ['NC', 'N. crédito'],
                     ['VD', 'Venda dinheiro'],
                     ['ND', 'Nota débito'],
+                    ['GR', 'Guia remessa'],
                     ['PP', 'Proforma'],
                   ].map(([value, label]) => (
                     <button
@@ -658,6 +681,62 @@ export default function InvoiceModule() {
                   </Field>
                 </div>
               </section>
+
+              {invoiceType === 'GR' && (
+                <section className="space-y-3 animate-in slide-in-from-top-2 duration-300">
+                  <SectionTitle icon={Landmark} label="Dados de circulação de mercadorias" />
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <Field label="Matrícula da viatura">
+                      <input 
+                        placeholder="Ex: LD-00-00-AA"
+                        className={`field-input ${softClass(theme)}`} 
+                        value={vehiclePlate} 
+                        onChange={(e) => setVehiclePlate(e.target.value)} 
+                      />
+                    </Field>
+                    <Field label="Nome do motorista">
+                      <input 
+                        placeholder="Nome completo do condutor"
+                        className={`field-input ${softClass(theme)}`} 
+                        value={driverName} 
+                        onChange={(e) => setDriverName(e.target.value)} 
+                      />
+                    </Field>
+                    <Field label="Local de carga">
+                      <input 
+                        placeholder="Morada detalhada de recolha"
+                        className={`field-input ${softClass(theme)}`} 
+                        value={loadingPoint} 
+                        onChange={(e) => setLoadingPoint(e.target.value)} 
+                      />
+                    </Field>
+                    <Field label="Local de descarga">
+                      <input 
+                        placeholder="Morada detalhada de destino"
+                        className={`field-input ${softClass(theme)}`} 
+                        value={deliveryPoint} 
+                        onChange={(e) => setDeliveryPoint(e.target.value)} 
+                      />
+                    </Field>
+                    <Field label="Data de carga">
+                      <input 
+                        type="datetime-local"
+                        className={`field-input ${softClass(theme)}`} 
+                        value={loadingDate} 
+                        onChange={(e) => setLoadingDate(e.target.value)} 
+                      />
+                    </Field>
+                    <Field label="Data de entrega prevista">
+                      <input 
+                        type="datetime-local"
+                        className={`field-input ${softClass(theme)}`} 
+                        value={deliveryDate} 
+                        onChange={(e) => setDeliveryDate(e.target.value)} 
+                      />
+                    </Field>
+                  </div>
+                </section>
+              )}
 
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -821,6 +900,20 @@ export default function InvoiceModule() {
               <Meta label="Filial" value={selectedInvoice.estabelecimentoCode || 'SEDE'} />
               <Meta label="Moeda" value={selectedInvoice.currency} />
             </div>
+
+            {selectedInvoice.vehiclePlate && (
+              <div className={`mb-6 p-4 rounded-lg border ${softClass(theme)} space-y-4`}>
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <Landmark className="h-4 w-4" /> Dados de Circulação
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                  <Meta label="Matrícula" value={selectedInvoice.vehiclePlate} />
+                  <Meta label="Motorista" value={selectedInvoice.driverName || '---'} />
+                  <Meta label="Data Carga" value={selectedInvoice.loadingDate ? new Date(selectedInvoice.loadingDate).toLocaleString('pt-AO') : '---'} />
+                  <Meta label="Ponto Carga" value={selectedInvoice.loadingPoint || '---'} />
+                </div>
+              </div>
+            )}
 
             <div className="overflow-x-auto">
               <table className="w-full min-w-[620px] text-sm">
