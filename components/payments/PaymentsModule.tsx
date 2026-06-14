@@ -186,13 +186,15 @@ export function PaymentsModule() {
         amountPaid: amount,
       }));
 
-      await ReceiptService.create({
+      const receipt = await ReceiptService.create({
         clientId: selectedClientId,
         paymentMethod,
         issueDate: new Date().toISOString().split('T')[0],
         notes: reference ? `Referência: ${reference}` : '',
         items,
       });
+
+      await ReceiptService.emit(receipt.id);
 
       addNotification({
         title: 'Recibo Emitido',

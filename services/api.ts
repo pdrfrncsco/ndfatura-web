@@ -308,6 +308,10 @@ export const ReceiptService = {
     link.click();
     link.remove();
   },
+  emit: async (id: string): Promise<Receipt> => {
+    const response = await apiClient.post<ApiEnvelope<Receipt>>(`/recibos/${id}/emitir/`);
+    return unwrap(response);
+  },
 };
 
 export const AuditService = {
