@@ -9,6 +9,7 @@ import Sidebar from '../components/layout/Sidebar';
 import Topbar from '../components/layout/Topbar';
 import DashboardView from '../components/dashboard/DashboardView';
 import InvoiceModule from '../components/invoices/InvoiceModule';
+import RecurringInvoiceModule from '../components/recurring/RecurringInvoiceModule';
 import { PaymentsModule } from '../components/payments/PaymentsModule';
 import ClientsModule from '../components/clients/ClientsModule';
 import ProductsModule from '../components/products/ProductsModule';
@@ -44,10 +45,7 @@ function ApplicationShell() {
 
   React.useEffect(() => {
     if (isAuthenticated && currentTenant) {
-      loadTenantData(currentTenant.id).then(() => {
-        // Trigger onboarding if no products or establishments configured
-        // (Assuming loadTenantData updates the store with actual counts)
-      });
+      loadTenantData(currentTenant.id);
     }
   }, [currentTenant, isAuthenticated, loadTenantData]);
 
@@ -101,6 +99,7 @@ function ApplicationShell() {
           )}
           {currentScreen === 'dashboard' && <DashboardView />}
           {currentScreen === 'invoices' && <InvoiceModule />}
+          {currentScreen === 'recurring' && <RecurringInvoiceModule />}
           {currentScreen === 'payments' && <PaymentsModule />}
           {currentScreen === 'clients' && <ClientsModule />}
           {currentScreen === 'products' && <ProductsModule />}

@@ -18,7 +18,8 @@ import {
   ProductService, 
   ReceiptService,
   EstabelecimentoService,
-  ExchangeRateService
+  ExchangeRateService,
+  RecurringInvoiceService
 } from '../services/api';
 
 interface DataState {
@@ -26,6 +27,7 @@ interface DataState {
   products: Product[];
   invoices: Invoice[];
   receipts: Receipt[];
+  recurringInvoices: any[];
   estabelecimentos: Estabelecimento[];
   exchangeRates: ExchangeRate[];
   auditLogs: AuditLog[];
@@ -38,6 +40,7 @@ interface DataState {
   fetchClients: () => Promise<void>;
   fetchInvoices: () => Promise<void>;
   fetchReceipts: () => Promise<void>;
+  fetchRecurringInvoices: () => Promise<void>;
   
   // Actions for Clients
   addClient: (client: Omit<Client, 'id'>) => Promise<Client>;
@@ -70,6 +73,10 @@ interface DataState {
   validateInvoiceWithAGT: (id: string) => Promise<void>;
   addAuditLog: (log: Omit<AuditLog, 'id' | 'timestamp'>) => void;
   
+  // Actions for Recurring Invoices
+  addRecurringInvoice: (data: any) => Promise<any>;
+  deleteRecurringInvoice: (id: string) => Promise<void>;
+  
   // Actions for Receipts
   addReceipt: (receipt: Receipt) => void;
   
@@ -101,6 +108,7 @@ export const useDataStore = create<DataState>((set, get) => ({
   products: getStorageItem('ndf_products', []),
   invoices: getStorageItem('ndf_invoices', []),
   receipts: getStorageItem('ndf_receipts', []),
+  recurringInvoices: getStorageItem('ndf_recurring', []),
   estabelecimentos: getStorageItem('ndf_estabelecimentos', []),
   exchangeRates: getStorageItem('ndf_exchange_rates', []),
   auditLogs: getStorageItem('ndf_audit_logs', []),
@@ -111,7 +119,7 @@ export const useDataStore = create<DataState>((set, get) => ({
   loadTenantData: async (tenantId) => {
     set({ isLoadingRemoteData: true, remoteDataError: null });
     try {
-      const [clients, products, invoices, receipts, auditLogs, dashboardStats, estabelecimentos, exchangeRates] = await Promise.all([
+      const [clients, products, invoices, receipts, auditLogs, dashboardStats, estabelecimentos, exchangeRates, recurringInvoices] = await Promise.all([
         ClientService.getAll(),
         ProductService.getAll(),
         InvoiceService.getAll(),
@@ -119,7 +127,8 @@ export const useDataStore = create<DataState>((set, get) => ({
         AuditService.getAll(),
         DashboardService.getStats(),
         EstabelecimentoService.getAll(),
-        ExchangeRateService.getAll()
+        ExchangeRateService.getAll(),
+        RecurringInvoiceService.getAll()
       ]);
 
       set((state) => ({
@@ -130,6 +139,7 @@ export const useDataStore = create<DataState>((set, get) => ({
         auditLogs,
         estabelecimentos,
         exchangeRates,
+        recurringInvoices,
         dashboardStatsByTenant: {
           ...state.dashboardStatsByTenant,
           [tenantId]: dashboardStats
@@ -145,6 +155,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       setStorageItem('ndf_audit_logs', auditLogs);
       setStorageItem('ndf_estabelecimentos', estabelecimentos);
       setStorageItem('ndf_exchange_rates', exchangeRates);
+      setStorageItem('ndf_recurring', recurringInvoices);
     } catch (error) {
       set({
         isLoadingRemoteData: false,
@@ -180,6 +191,16 @@ export const useDataStore = create<DataState>((set, get) => ({
       setStorageItem('ndf_receipts', receipts);
     } catch (error) {
       console.error('Error fetching receipts:', error);
+    }
+  },
+
+  fetchRecurringInvoices: async () => {
+    try {
+      const recurringInvoices = await RecurringInvoiceService.getAll();
+      set({ recurringInvoices });
+      setStorageItem('ndf_recurring', recurringInvoices);
+    } catch (error) {
+      console.error('Error fetching recurring:', error);
     }
   },
 
@@ -431,6 +452,21 @@ export const useDataStore = create<DataState>((set, get) => ({
     const updated = [newLog, ...get().auditLogs].slice(0, 100); 
     set({ auditLogs: updated });
     setStorageItem('ndf_audit_logs', updated);
+  },
+
+  addRecurringInvoice: async (data) => {
+    const newRecurring = await RecurringInvoiceService.create(data);
+    const updated = [newRecurring, ...get().recurringInvoices];
+    set({ recurringInvoices: updated });
+    setStorageItem('ndf_recurring', updated);
+    return newRecurring;
+  },
+
+  deleteRecurringInvoice: async (id) => {
+    await RecurringInvoiceService.delete(id);
+    const updated = get().recurringInvoices.filter(r => r.id !== id);
+    set({ recurringInvoices: updated });
+    setStorageItem('ndf_recurring', updated);
   },
 
   addReceipt: (receipt) => {

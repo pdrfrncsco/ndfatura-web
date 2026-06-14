@@ -29,6 +29,7 @@ export function InvoicePrintView({ invoice, tenant, branch }: InvoicePrintViewPr
       case 'FR': return 'FACTURA-RECIBO';
       case 'NC': return 'NOTA DE CRÉDITO';
       case 'VD': return 'VENDA A DINHEIRO';
+      case 'ND': return 'NOTA DE DÉBITO';
       default: return type;
     }
   };

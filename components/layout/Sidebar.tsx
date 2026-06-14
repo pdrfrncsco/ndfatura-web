@@ -37,6 +37,7 @@ export default function Sidebar({ onSearchFocus }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'invoices', label: 'Facturação', icon: FileText },
+    { id: 'recurring', label: 'Faturas Recorrentes', icon: History },
     { id: 'payments', label: 'Recebimentos', icon: Wallet },
     { id: 'clients', label: 'Clientes', icon: Users },
     { id: 'products', label: 'Produtos e IVA', icon: Package },

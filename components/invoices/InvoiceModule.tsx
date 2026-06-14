@@ -589,6 +589,7 @@ export default function InvoiceModule() {
                     ['FR', 'Fact. recibo'],
                     ['NC', 'N. crédito'],
                     ['VD', 'Venda dinheiro'],
+                    ['ND', 'Nota débito'],
                     ['PP', 'Proforma'],
                   ].map(([value, label]) => (
                     <button
@@ -890,6 +891,15 @@ export default function InvoiceModule() {
                 <ActionButton onClick={() => handleValidateAGT(selectedInvoice.id)} icon={RefreshCcw} label={isSyncing ? 'A validar...' : 'Re-sincronizar AGT'} />
               )}
               <ActionButton onClick={() => window.print()} icon={Printer} label="Imprimir (A4)" />
+              <ActionButton 
+                onClick={() => {
+                  const url = `${window.location.origin}/public/invoice/${selectedInvoice.publicToken}`;
+                  navigator.clipboard.writeText(url);
+                  addNotification({ title: 'Link Copiado', desc: 'O link do portal do cliente foi copiado.', type: 'success' });
+                }} 
+                icon={Copy} 
+                label="Copiar link público" 
+              />
               <ActionButton onClick={() => handleDownloadPdf(selectedInvoice)} icon={Download} label="Descarregar PDF" />
               <ActionButton onClick={() => handleSendEmail(selectedInvoice.id)} icon={Mail} label="Reenviar ao cliente" />
               <ActionButton onClick={() => addNotification({ title: 'Duplicação', desc: 'Use a criação de factura para emitir novo documento.', type: 'info' })} icon={Copy} label="Duplicar factura" />

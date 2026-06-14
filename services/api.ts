@@ -318,6 +318,20 @@ export const ReceiptService = {
   },
 };
 
+export const RecurringInvoiceService = {
+  getAll: async (): Promise<any[]> => {
+    const response = await apiClient.get<ApiEnvelope<any[]>>('/recorrentes/');
+    return unwrap(response);
+  },
+  create: async (data: any): Promise<any> => {
+    const response = await apiClient.post<ApiEnvelope<any>>('/recorrentes/', data);
+    return unwrap(response);
+  },
+  delete: async (id: string): Promise<void> => {
+    await apiClient.delete(`/recorrentes/${id}/`);
+  },
+};
+
 export const AuditService = {
   getAll: async (): Promise<AuditLog[]> => {
     const response = await apiClient.get<ApiEnvelope<AuditLog[]>>('/auditoria/');

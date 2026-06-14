@@ -124,6 +124,7 @@ export interface Invoice {
   status: InvoiceStatus;
   currency: string;
   exchangeRate: number;
+  publicToken: string;
   issueDate: string;
   dueDate: string;
   clientId: string;
