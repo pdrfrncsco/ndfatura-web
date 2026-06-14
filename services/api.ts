@@ -171,6 +171,10 @@ export const UserService = {
     const response = await apiClient.get<ApiEnvelope<TenantMember[]>>('/auth/members/');
     return unwrap(response);
   },
+  createTenantMember: async (data: { firstName: string; lastName?: string; email: string; role: UserRole; password: string; membershipRole?: string }): Promise<TenantMember> => {
+    const response = await apiClient.post<ApiEnvelope<TenantMember>>('/auth/members/', data);
+    return unwrap(response);
+  },
   updateTenantMember: async (id: string, data: { isActive?: boolean; role?: UserRole }): Promise<TenantMember> => {
     const response = await apiClient.patch<ApiEnvelope<TenantMember>>(`/auth/members/${id}/`, data);
     return unwrap(response);
@@ -280,7 +284,16 @@ export const ReceiptService = {
     return unwrap(response);
   },
   create: async (data: { clientId: string; items: { invoiceId: string; amountPaid: number }[]; paymentMethod: string; issueDate: string; notes?: string }): Promise<Receipt> => {
-    const response = await apiClient.post<ApiEnvelope<Receipt>>('/recibos/', data);
+    const payload = {
+      client: data.clientId,
+      payment_method: data.paymentMethod,
+      notes: data.notes || '',
+      items: data.items.map((item) => ({
+        invoice_id: item.invoiceId,
+        amount: item.amountPaid,
+      })),
+    };
+    const response = await apiClient.post<ApiEnvelope<Receipt>>('/recibos/', payload);
     return unwrap(response);
   },
   downloadPdf: async (id: string, fileName: string): Promise<void> => {

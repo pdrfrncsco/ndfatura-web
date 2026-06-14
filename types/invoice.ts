@@ -183,11 +183,12 @@ export interface DashboardStats {
   recentActivity: AuditLog[];
 }
 
-export type PaymentMethod = 'NU' | 'TB' | 'CC' | 'OU' | 'TR';
+export type PaymentMethod = 'CH' | 'TR' | 'TP' | 'DP' | 'OU';
 export type ReceiptStatus = 'Draft' | 'Issued' | 'Cancelled';
 
 export interface ReceiptItem {
   id: string;
+  invoice?: string;
   invoiceId: string;
   invoiceNo: string;
   amountPaid: number;

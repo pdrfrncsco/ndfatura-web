@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Award, Loader2, RefreshCcw, Search, ShieldAlert, ShieldCheck, UserCheck } from 'lucide-react';
+import { Award, Loader2, Plus, RefreshCcw, Search, ShieldAlert, ShieldCheck, UserCheck, X } from 'lucide-react';
 import { UserService } from '../../services/api';
 import { useAuthStore } from '../../stores/authStore';
 import { TenantMember, UserRole } from '../../types/invoice';
@@ -47,13 +47,23 @@ function roleConfig(role: string) {
 }
 
 export default function UsersModule() {
-  const { theme, currentTenant, addNotification } = useAuthStore();
+  const { theme, currentTenant, user, addNotification } = useAuthStore();
   const [tenantUsers, setTenantUsers] = React.useState<TenantMember[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [isCreateOpen, setIsCreateOpen] = React.useState(false);
+  const [isCreating, setIsCreating] = React.useState(false);
   const [updatingId, setUpdatingId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [searchTerm, setSearchTerm] = React.useState('');
+  const [createForm, setCreateForm] = React.useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    role: 'Billing_Clerk' as UserRole,
+    password: '',
+  });
+  const [createError, setCreateError] = React.useState<string | null>(null);
 
   const loadUsers = React.useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
     if (mode === 'initial') setIsLoading(true);
@@ -80,6 +90,8 @@ export default function UsersModule() {
   }, [currentTenant, loadUsers]);
 
   if (!currentTenant) return null;
+
+  const canCreateMembers = user?.role === 'Admin';
 
   const filteredUsers = tenantUsers.filter((member) => {
     const term = searchTerm.trim().toLowerCase();
@@ -124,6 +136,49 @@ export default function UsersModule() {
     updateMember(member, { isActive: !member.isActive });
   };
 
+  const handleCreateMember = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setCreateError(null);
+
+    if (!canCreateMembers) {
+      setCreateError('Apenas administradores podem adicionar membros.');
+      return;
+    }
+    if (!createForm.firstName.trim() || !createForm.email.trim() || !createForm.password.trim()) {
+      setCreateError('Preencha nome, email e palavra-passe.');
+      return;
+    }
+    if (createForm.password.length < 8) {
+      setCreateError('A palavra-passe deve ter pelo menos 8 caracteres.');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const created = await UserService.createTenantMember({
+        firstName: createForm.firstName.trim(),
+        lastName: createForm.lastName.trim(),
+        email: createForm.email.trim().toLowerCase(),
+        role: createForm.role,
+        password: createForm.password,
+      });
+      setTenantUsers((members) => [created, ...members.filter((member) => member.id !== created.id)]);
+      setCreateForm({ firstName: '', lastName: '', email: '', role: 'Billing_Clerk', password: '' });
+      setIsCreateOpen(false);
+      addNotification({
+        title: 'Membro adicionado',
+        desc: `${created.name || created.email} já tem acesso à empresa.`,
+        type: 'success',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Não foi possível adicionar o membro.';
+      setCreateError(message);
+      addNotification({ title: 'Falha ao Adicionar', desc: message, type: 'warning' });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -136,17 +191,111 @@ export default function UsersModule() {
             Credenciais de acesso da empresa <strong className="font-semibold">{currentTenant.name}</strong>.
           </p>
         </div>
-        <button
-          onClick={() => loadUsers('refresh')}
-          disabled={isRefreshing || isLoading}
-          className={`inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold transition disabled:opacity-50 ${
-            theme === 'dark' ? 'border-slate-800 bg-slate-950 hover:bg-slate-900' : 'border-slate-200 bg-white hover:bg-slate-50'
-          }`}
-        >
-          <RefreshCcw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Actualizar
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {canCreateMembers && (
+            <button
+              onClick={() => {
+                setCreateError(null);
+                setIsCreateOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar membro
+            </button>
+          )}
+          <button
+            onClick={() => loadUsers('refresh')}
+            disabled={isRefreshing || isLoading}
+            className={`inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold transition disabled:opacity-50 ${
+              theme === 'dark' ? 'border-slate-800 bg-slate-950 hover:bg-slate-900' : 'border-slate-200 bg-white hover:bg-slate-50'
+            }`}
+          >
+            <RefreshCcw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
+        </div>
       </div>
+
+      {isCreateOpen && (
+        <div className={`rounded-xl border p-4 ${theme === 'dark' ? 'border-slate-900 bg-slate-950' : 'border-slate-200 bg-white'}`}>
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold">Adicionar membro</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Cria um utilizador e associa-o à empresa activa.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsCreateOpen(false)}
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-500/10"
+              aria-label="Fechar formulário"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <form onSubmit={handleCreateMember} className="grid grid-cols-1 gap-3 md:grid-cols-5">
+            <Field label="Nome" theme={theme}>
+              <input
+                value={createForm.firstName}
+                onChange={(event) => setCreateForm((form) => ({ ...form, firstName: event.target.value }))}
+                className={inputClass(theme)}
+                placeholder="Ex: Ana"
+              />
+            </Field>
+            <Field label="Apelido" theme={theme}>
+              <input
+                value={createForm.lastName}
+                onChange={(event) => setCreateForm((form) => ({ ...form, lastName: event.target.value }))}
+                className={inputClass(theme)}
+                placeholder="Ex: Manuel"
+              />
+            </Field>
+            <Field label="Email" theme={theme}>
+              <input
+                type="email"
+                value={createForm.email}
+                onChange={(event) => setCreateForm((form) => ({ ...form, email: event.target.value }))}
+                className={inputClass(theme)}
+                placeholder="utilizador@empresa.ao"
+              />
+            </Field>
+            <Field label="Perfil" theme={theme}>
+              <select
+                value={createForm.role}
+                onChange={(event) => setCreateForm((form) => ({ ...form, role: event.target.value as UserRole }))}
+                className={inputClass(theme)}
+              >
+                {roleOptions.map((role) => (
+                  <option key={role} value={role}>
+                    {roleConfig(role).label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Palavra-passe" theme={theme}>
+              <input
+                type="password"
+                value={createForm.password}
+                onChange={(event) => setCreateForm((form) => ({ ...form, password: event.target.value }))}
+                className={inputClass(theme)}
+                placeholder="mín. 8 caracteres"
+              />
+            </Field>
+            <div className="md:col-span-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              {createError ? <p className="text-xs font-semibold text-red-500">{createError}</p> : <span />}
+              <button
+                type="submit"
+                disabled={isCreating}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isCreating && <Loader2 className="h-4 w-4 animate-spin" />}
+                Guardar membro
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <SummaryCard theme={theme} label="Utilizadores" value={String(tenantUsers.length)} tone="blue" />
@@ -157,7 +306,7 @@ export default function UsersModule() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className={`overflow-hidden rounded-xl border lg:col-span-2 ${theme === 'dark' ? 'border-slate-900 bg-slate-950' : 'border-slate-200 bg-white'}`}>
           <div className="flex flex-col gap-3 border-b p-4 dark:border-slate-900 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-xs font-bold uppercase text-slate-400">Utilizadores do tenant</span>
+            <span className="text-xs font-bold uppercase text-slate-400">Utilizadores da Empresa</span>
             <div className="relative w-full sm:max-w-xs">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -226,20 +375,22 @@ export default function UsersModule() {
                             <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold ${cfg.badge}`}>
                               {cfg.label}
                             </span>
-                            <select
-                              value={member.role}
-                              disabled={isUpdating}
-                              onChange={(event) => updateMember(member, { role: event.target.value as UserRole })}
-                              className={`block w-full max-w-[220px] rounded-md border px-2 py-1.5 text-[11px] outline-none disabled:opacity-50 ${
-                                theme === 'dark' ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-slate-50'
-                              }`}
-                            >
-                              {roleOptions.map((role) => (
-                                <option key={role} value={role}>
-                                  {roleConfig(role).label}
-                                </option>
-                              ))}
-                            </select>
+                            {canCreateMembers && (
+                              <select
+                                value={member.role}
+                                disabled={isUpdating}
+                                onChange={(event) => updateMember(member, { role: event.target.value as UserRole })}
+                                className={`block w-full max-w-[220px] rounded-md border px-2 py-1.5 text-[11px] outline-none disabled:opacity-50 ${
+                                  theme === 'dark' ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-slate-50'
+                                }`}
+                              >
+                                {roleOptions.map((role) => (
+                                  <option key={role} value={role}>
+                                    {roleConfig(role).label}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
                           </div>
                         </td>
                         <td className="p-3.5">
@@ -252,7 +403,7 @@ export default function UsersModule() {
                           <button
                             id={`btn-toggle-operator-${member.id}`}
                             onClick={() => handleToggleStatus(member)}
-                            disabled={isUpdating || (member.isSelf && member.isActive)}
+                            disabled={!canCreateMembers || isUpdating || (member.isSelf && member.isActive)}
                             className={`rounded px-2 py-1 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
                               member.isActive
                                 ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20'
@@ -321,4 +472,21 @@ function SummaryCard({ theme, label, value, tone }: { theme: 'light' | 'dark'; l
       <div className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</div>
     </div>
   );
+}
+
+function Field({ label, theme, children }: { label: string; theme: 'light' | 'dark'; children: React.ReactNode }) {
+  return (
+    <label className="space-y-1.5">
+      <span className={`block text-[11px] font-bold uppercase tracking-wide ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function inputClass(theme: 'light' | 'dark') {
+  return `w-full rounded-lg border px-3 py-2 text-xs outline-none focus:border-blue-500 ${
+    theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100' : 'border-slate-200 bg-slate-50 text-slate-900'
+  }`;
 }

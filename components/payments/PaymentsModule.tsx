@@ -53,9 +53,9 @@ const softClass = (theme: string) =>
 
 const paymentMethods: Array<{ value: PaymentMethod; label: string; icon: React.ElementType }> = [
   { value: 'TR', label: 'Transferência', icon: Landmark },
-  { value: 'NU', label: 'Numerário', icon: Wallet },
-  { value: 'CC', label: 'TPA / Cartão', icon: CreditCard },
-  { value: 'TB', label: 'Multicaixa', icon: Smartphone },
+  { value: 'CH', label: 'Numerário', icon: Wallet },
+  { value: 'TP', label: 'TPA', icon: CreditCard },
+  { value: 'DP', label: 'Depósito', icon: Smartphone },
 ];
 
 export function PaymentsModule() {
@@ -618,9 +618,9 @@ export function PaymentsModule() {
 
 function methodLabel(method: PaymentMethod) {
   const labels: Record<PaymentMethod, string> = {
-    NU: 'Numerário',
-    TB: 'Multicaixa',
-    CC: 'TPA / Cartão',
+    CH: 'Numerário',
+    DP: 'Depósito',
+    TP: 'TPA',
     OU: 'Outro',
     TR: 'Transferência',
   };
