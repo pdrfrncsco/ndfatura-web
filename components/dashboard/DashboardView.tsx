@@ -19,7 +19,8 @@ import {
   Eye,
   EyeOff,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Landmark
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -40,9 +41,8 @@ import {
 
 export default function DashboardView() {
   const { currentTenant, theme, setCurrentScreen } = useAuthStore();
-  const { getDashboardStats } = useDataStore();
+  const { getDashboardStats, isLoadingRemoteData } = useDataStore();
 
-  const [isLoading, setIsLoading] = React.useState(true);
   const [isCustomizing, setIsCustomizing] = React.useState(false);
   
   // Dashboard Layout State
@@ -84,13 +84,7 @@ export default function DashboardView() {
     }
   };
 
-  React.useEffect(() => {
-    // Simulate real database fetching delay for smooth loader experience
-    const timer = setTimeout(() => setIsLoading(false), 450);
-    return () => clearTimeout(timer);
-  }, [currentTenant]);
-
-  if (isLoading || !currentTenant) {
+  if (isLoadingRemoteData || !currentTenant) {
     return (
       <div className="space-y-6 w-full animate-pulse">
         <div className="flex justify-between items-center">
@@ -155,7 +149,7 @@ export default function DashboardView() {
                 : (theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-600')
             }`}
           >
-            <Settings className={`h-4 w-4 ${isCustomizing ? 'animate-spin' : ''}`} />
+            <Settings className={`h-4 w-4 ${isCustomizing ? 'animate-spin-slow' : ''}`} />
             <span>{isCustomizing ? 'Concluir' : 'Personalizar'}</span>
           </button>
 
@@ -262,7 +256,7 @@ export default function DashboardView() {
                       </div>
                     </div>
                     <div className="mt-4 font-sans font-bold text-lg sm:text-xl truncate">
-                      {formatKwanza(stats.withholdingCollected)}
+                      {formatKwanza(stats.withholdingCollected || 0)}
                     </div>
                     <div className="mt-2 text-[11px] flex items-center gap-1 text-slate-500">
                       <span>IVA Retido na fonte por clientes</span>
@@ -297,12 +291,12 @@ export default function DashboardView() {
                 <div key="revenue_evolution" className="p-6 rounded-xl border border-slate-900/10 dark:border-slate-800/40 bg-white dark:bg-slate-950 shadow-sm">
                   <div className="flex justify-between items-center mb-6">
                     <div>
-                      <h3 className="text-sm font-bold font-sans">Evolução de Facturação do Semestre</h3>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Metas comparadas (líquidas de IVA) em AOA</p>
+                      <h3 className="text-sm font-bold font-sans">Evolução de Facturação do Ano</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Total facturado mensal (líquido de IVA) em AOA</p>
                     </div>
                     <div className="flex items-center gap-3 text-[10px] font-mono">
                       <span className="flex items-center gap-1 text-blue-500">
-                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500" /> Valor Total
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500" /> Valor Facturado
                       </span>
                     </div>
                   </div>
@@ -416,7 +410,7 @@ export default function DashboardView() {
                   <div className="flex justify-between items-center mb-6">
                     <div>
                       <h3 className="text-sm font-bold font-sans">Projecção de Recebimentos vs Realizado</h3>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Fluxo de caixa previsto (Due Dates) vs Pagamentos confirmados</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Fluxo de caixa previsto (Due Dates) vs Pagamentos confirmados (Recibos)</p>
                     </div>
                     <div className="flex items-center gap-4 text-[10px] font-mono font-bold uppercase">
                       <span className="flex items-center gap-1.5 text-blue-500">
