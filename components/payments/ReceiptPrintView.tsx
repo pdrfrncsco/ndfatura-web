@@ -29,7 +29,7 @@ export function ReceiptPrintView({ receipt, tenant }: ReceiptPrintViewProps) {
   };
 
   return (
-    <div className="bg-white p-0 font-sans text-slate-900" style={{ width: '210mm', minHeight: '297mm', margin: '0 auto' }}>
+    <div className="bg-white p-0 font-sans text-slate-900" style={{ width: '100%', minHeight: '297mm', margin: '0 auto' }}>
       {/* Header Section */}
       <div className="flex justify-between items-start mb-8 border-b-4 border-slate-800 pb-6">
         <div className="w-1/2">
