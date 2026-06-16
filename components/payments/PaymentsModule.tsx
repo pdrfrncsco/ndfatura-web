@@ -12,17 +12,22 @@ import {
   Download,
   FileText,
   Landmark,
+  Mail,
   Plus,
+  Printer,
   Receipt as ReceiptIcon,
   Search,
   ShieldCheck,
   Smartphone,
   Wallet,
+  X,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
 import { ReceiptService } from '../../services/api';
 import { Invoice, PaymentMethod, Receipt } from '../../types/invoice';
+import { ReceiptPrintView } from './ReceiptPrintView';
+import { FeedbackOverlay } from '../common/FeedbackOverlay';
 
 const toAmount = (value: unknown) => {
   const amount = Number(value ?? 0);
@@ -73,6 +78,10 @@ export function PaymentsModule() {
   const [reference, setReference] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [selectedReceipt, setSelectedReceipt] = React.useState<Receipt | null>(null);
+  const [feedback, setFeedback] = React.useState<{ status: 'idle' | 'loading' | 'success' | 'error'; message: string }>({
+    status: 'idle',
+    message: '',
+  });
 
   const loadReceipts = React.useCallback(async () => {
     try {
@@ -165,6 +174,30 @@ export function PaymentsModule() {
       await ReceiptService.downloadPdf(receipt.id, fileName);
     } catch {
       addNotification({ title: 'Erro no Download', desc: 'Não foi possível gerar o PDF.', type: 'warning' });
+    }
+  };
+
+  const handleCancelReceipt = async (id: string) => {
+    if (!confirm('Deseja anular este recibo? Esta acção reverterá o estado de liquidação das facturas associadas.')) return;
+    try {
+      setFeedback({ status: 'loading', message: 'Anulando recibo...' });
+      const result = await ReceiptService.cancel(id);
+      setSelectedReceipt(result);
+      setFeedback({ status: 'success', message: 'Recibo anulado com sucesso.' });
+      loadReceipts();
+      fetchInvoices();
+    } catch (err) {
+      setFeedback({ status: 'error', message: 'Falha ao anular recibo.' });
+    }
+  };
+
+  const handleSendReceiptEmail = async (id: string) => {
+    try {
+      setFeedback({ status: 'loading', message: 'Enviando e-mail para o cliente...' });
+      await ReceiptService.sendEmail(id);
+      setFeedback({ status: 'success', message: 'E-mail enviado com sucesso.' });
+    } catch {
+      setFeedback({ status: 'error', message: 'Falha ao enviar e-mail.' });
     }
   };
 
@@ -531,90 +564,153 @@ export function PaymentsModule() {
 
       {viewState === 'view' && selectedReceipt && (
         <div className="space-y-4 animate-in fade-in duration-200">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 px-1">
             <div className="flex items-center gap-3">
               <button type="button" onClick={() => setViewState('list')} className="rounded-md border p-2 dark:border-slate-800">
                 <ArrowLeft className="h-4 w-4" />
               </button>
               <div>
-                <h1 className="text-lg font-semibold">Detalhes do recibo</h1>
-                <p className="font-mono text-xs text-slate-500">{selectedReceipt.receiptNo}</p>
+                <h1 className="text-lg font-bold">Detalhes do recibo</h1>
+                <p className="font-mono text-xs text-slate-500">{selectedReceipt.receiptNo || 'Rascunho'}</p>
               </div>
             </div>
-            <button
-              onClick={() => handleDownloadPdf(selectedReceipt)}
-              className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold dark:border-slate-800"
-            >
-              <Download className="h-4 w-4" />
-              Descarregar PDF
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir (A4)
+              </button>
+              <button
+                onClick={() => handleDownloadPdf(selectedReceipt)}
+                className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
+              >
+                <Download className="h-4 w-4" />
+                Descarregar PDF
+              </button>
+            </div>
           </div>
 
-          <div className={`mx-auto max-w-4xl rounded-lg border p-6 shadow-sm ${cardClass(theme)}`}>
-            <div className="mb-6 flex items-start justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-indigo-600 text-xl font-semibold text-white">RC</div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+            <div className={`rounded-xl border p-8 shadow-sm ${cardClass(theme)}`}>
+              <div className="mb-10 flex items-start justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-blue-600 text-xl font-black text-white italic shadow-lg shadow-blue-500/20">RC</div>
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-tight">{currentTenant.name}</h2>
+                    <p className="font-mono text-xs text-slate-500">NIF: {currentTenant.nif}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-black text-slate-800 tracking-tighter">RECIBO</div>
+                  <div className="font-mono text-sm font-bold text-blue-600">{selectedReceipt.receiptNo || 'RASCUNHO'}</div>
+                  <div className="mt-3">{renderStatusBadge(selectedReceipt.status)}</div>
+                </div>
+              </div>
+
+              <div className="mb-10 grid grid-cols-1 gap-8 border-y border-slate-100 py-8 md:grid-cols-2 dark:border-slate-800">
                 <div>
-                  <h2 className="text-xl font-semibold">{currentTenant.name}</h2>
-                  <p className="font-mono text-xs text-slate-500">NIF: {currentTenant.nif}</p>
+                  <div className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Dados do Cliente</div>
+                  <div className="text-lg font-bold">{selectedReceipt.clientName}</div>
+                  <div className="mt-2 space-y-1 text-xs text-slate-500 font-medium">
+                    <p>NIF: {selectedReceipt.clientNif || '-'}</p>
+                    <p>Data de emissão: <span className="text-slate-900 dark:text-slate-200">{dateLabel(selectedReceipt.issueDate)}</span></p>
+                    <p>Método de pagamento: <span className="text-slate-900 dark:text-slate-200 uppercase">{methodLabel(selectedReceipt.paymentMethod)}</span></p>
+                  </div>
+                </div>
+                <div className="md:text-right flex flex-col justify-end">
+                  <div className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Valor Total Liquidado</div>
+                  <div className="text-4xl font-black text-blue-600 font-mono tracking-tighter">{money(selectedReceipt.totalAmount)}</div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-2xl font-semibold">RECIBO</div>
-                <div className="font-mono text-sm text-slate-500">{selectedReceipt.receiptNo}</div>
-                <div className="mt-2">{renderStatusBadge(selectedReceipt.status)}</div>
-              </div>
-            </div>
 
-            <div className="mb-6 grid grid-cols-1 gap-6 border-y py-6 md:grid-cols-2 dark:border-slate-800">
-              <div>
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cliente</div>
-                <div className="font-semibold">{selectedReceipt.clientName}</div>
-                <div className="mt-1 text-xs text-slate-500">Data de emissão: {dateLabel(selectedReceipt.issueDate)}</div>
-                <div className="text-xs text-slate-500">Método: {methodLabel(selectedReceipt.paymentMethod)}</div>
-              </div>
-              <div className="md:text-right">
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Resumo financeiro</div>
-                <div className="text-3xl font-semibold">{money(selectedReceipt.totalAmount)}</div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Documentos liquidados</div>
-              <table className="w-full text-left text-sm">
-                <thead className="border-b text-xs text-slate-500 dark:border-slate-800">
-                  <tr>
-                    <th className="py-2">Factura</th>
-                    <th className="py-2 text-right">Valor pago</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {selectedReceipt.items.map((item) => (
-                    <tr key={item.id}>
-                      <td className="py-3 font-mono font-semibold">{item.invoiceNo}</td>
-                      <td className="py-3 text-right font-mono font-semibold text-indigo-600">{money(item.amountPaid)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {selectedReceipt.receiptHash && (
-              <div className="mt-8 flex flex-col gap-4 border-t pt-6 md:flex-row md:items-end md:justify-between dark:border-slate-800">
-                <div className="max-w-xl space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Assinatura digital fiscal</div>
-                  <p className={`break-all rounded border p-3 font-mono text-xs text-slate-500 ${softClass(theme)}`}>{selectedReceipt.receiptHash}</p>
-                  <p className="text-xs text-slate-500">Validado pelo software {currentTenant.agtCertificateNo || '---'}</p>
-                </div>
-                <div className="rounded border border-dashed p-4 text-center text-xs text-slate-500 dark:border-slate-700">
-                  <div className="flex h-20 w-20 items-center justify-center">QR AGT</div>
+              <div className="space-y-4">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Documentos liquidados neste recibo</div>
+                <div className="overflow-hidden rounded-xl border border-slate-100 dark:border-slate-800">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:bg-slate-900/50">
+                      <tr>
+                        <th className="py-3 px-4">Documento / Factura</th>
+                        <th className="py-3 px-4 text-right">Valor processado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                      {selectedReceipt.items.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors">
+                          <td className="py-4 px-4 font-mono font-bold text-blue-600">{item.invoiceNo}</td>
+                          <td className="py-4 px-4 text-right font-mono text-slate-800 dark:text-slate-200">{money(item.amountPaid)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            )}
+
+              {selectedReceipt.receiptHash && (
+                <div className={`mt-10 rounded-xl border p-5 ${softClass(theme)}`}>
+                  <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-600">
+                    <ShieldCheck className="h-4 w-4" />
+                    Assinatura Digital Fiscal (AGT)
+                  </div>
+                  <p className="break-all font-mono text-xs text-slate-500 leading-relaxed">{selectedReceipt.receiptHash}</p>
+                  <div className="mt-4 flex items-center gap-2 text-[10px] text-slate-400 font-medium italic">
+                    Validado pelo software {currentTenant.agtCertificateNo || '0000/AGT/2026'} - FACTURYAN
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <aside className="space-y-6">
+              <div className={`rounded-xl border p-5 space-y-4 ${cardClass(theme)}`}>
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Acções do Recibo</h3>
+                <div className="space-y-2">
+                   <ActionButton onClick={() => window.print()} icon={Printer} label="Imprimir (A4)" />
+                   <ActionButton onClick={() => handleDownloadPdf(selectedReceipt)} icon={Download} label="Descarregar PDF" />
+                   <ActionButton onClick={() => handleSendReceiptEmail(selectedReceipt.id)} icon={Mail} label="Enviar ao cliente" />
+                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <ActionButton onClick={() => handleCancelReceipt(selectedReceipt.id)} icon={X} label="Anular recibo" tone="danger" />
+                   </div>
+                </div>
+              </div>
+
+              <div className={`rounded-xl border p-5 text-center ${cardClass(theme)}`}>
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">Validação AGT</h3>
+                <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                   <div className="text-[8px] font-black text-slate-400">QR CODE FISCAL</div>
+                </div>
+                <p className="mt-3 text-[10px] text-slate-400 font-medium">Digitalize para validar no portal da AGT</p>
+              </div>
+            </aside>
           </div>
         </div>
       )}
+
+      {/* Printable Area - Hidden on screen, shown on print */}
+      <div className="hidden print:block fixed inset-0 z-[9999] bg-white" id="printable-receipt-canvas">
+        <ReceiptPrintView 
+          receipt={selectedReceipt} 
+          tenant={currentTenant} 
+        />
+      </div>
+
+      <FeedbackOverlay status={feedback.status} message={feedback.message} onClose={() => setFeedback({ status: 'idle', message: '' })} />
     </div>
+  );
+}
+
+function ActionButton({ icon: Icon, label, onClick, tone }: { icon: React.ElementType; label: string; onClick: () => void; tone?: 'success' | 'danger' }) {
+  const cls =
+    tone === 'success'
+      ? 'border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10'
+      : tone === 'danger'
+        ? 'border-rose-500/30 text-rose-600 hover:bg-rose-500/10'
+        : 'border-slate-200 hover:bg-slate-500/5 dark:border-slate-800';
+  return (
+    <button onClick={onClick} className={`flex w-full items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition-all ${cls}`}>
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
   );
 }
 

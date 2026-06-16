@@ -320,6 +320,13 @@ export const ReceiptService = {
     const response = await apiClient.post<ApiEnvelope<Receipt>>(`/recibos/${id}/emitir/`);
     return unwrap(response);
   },
+  cancel: async (id: string): Promise<Receipt> => {
+    const response = await apiClient.post<ApiEnvelope<Receipt>>(`/recibos/${id}/cancelar/`);
+    return unwrap(response);
+  },
+  sendEmail: async (id: string): Promise<void> => {
+    await apiClient.post(`/recibos/${id}/enviar-email/`);
+  },
 };
 
 export const RecurringInvoiceService = {
