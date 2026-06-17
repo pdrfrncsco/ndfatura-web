@@ -54,6 +54,8 @@ export default function SettingsModule() {
   const [fiscalConfig, setFiscalConfig] = React.useState<ElectronicBillingConfiguration | null>(null);
   const [isLoadingFiscalConfig, setIsLoadingFiscalConfig] = React.useState(false);
   const [isStartingActivation, setIsStartingActivation] = React.useState(false);
+  const [certificatePassword, setCertificatePassword] = React.useState('');
+  const [isUploadingCertificate, setIsUploadingCertificate] = React.useState(false);
 
   const loadFiscalConfig = React.useCallback(async () => {
     if (!currentTenant) return;
@@ -175,6 +177,31 @@ export default function SettingsModule() {
       });
     } finally {
       setIsStartingActivation(false);
+    }
+  };
+
+  const handleFiscalCertificateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setIsUploadingCertificate(true);
+    try {
+      const status = await FiscalConfigurationService.uploadCertificate(file, certificatePassword);
+      setFiscalConfig(status);
+      setCertificatePassword('');
+      addNotification({
+        title: 'Certificado validado',
+        desc: 'O certificado fiscal foi carregado e associado à empresa.',
+        type: 'success',
+      });
+    } catch (error) {
+      addNotification({
+        title: 'Certificado recusado',
+        desc: error instanceof Error ? error.message : 'Verifique o ficheiro, a password e o NIF associado.',
+        type: 'warning',
+      });
+    } finally {
+      setIsUploadingCertificate(false);
     }
   };
 
@@ -508,14 +535,32 @@ export default function SettingsModule() {
                     <p>Certificado: {fiscalConfig?.certificate.exists ? fiscalConfig.certificate.serialNumber || 'sem número' : 'não carregado'}</p>
                     <p>Validade: {fiscalConfig?.certificate.expiresAt ? new Date(fiscalConfig.certificate.expiresAt).toLocaleDateString('pt-AO') : '-'}</p>
                   </div>
-                  <button
-                    type="button"
-                    disabled
-                    className="inline-flex items-center gap-2 rounded-md bg-sky-500/60 px-5 py-3 text-sm font-bold text-white disabled:cursor-not-allowed"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Carregar Certificado
-                  </button>
+                  <div className="mx-auto w-full max-w-[260px] space-y-2">
+                    <input
+                      type="password"
+                      value={certificatePassword}
+                      onChange={(event) => setCertificatePassword(event.target.value)}
+                      placeholder="Password do certificado"
+                      disabled={!fiscalConfig?.canUploadCertificate || isUploadingCertificate}
+                      className={`w-full rounded-md border px-3 py-2 text-xs outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-950 text-slate-100' : 'border-slate-200 bg-white text-slate-900'}`}
+                    />
+                    <button
+                      type="button"
+                      disabled={!fiscalConfig?.canUploadCertificate || isUploadingCertificate}
+                      onClick={() => document.getElementById('fiscal-certificate-input')?.click()}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-sky-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-sky-300"
+                    >
+                      <Upload className="h-4 w-4" />
+                      {isUploadingCertificate ? 'A validar...' : 'Carregar Certificado'}
+                    </button>
+                    <input
+                      id="fiscal-certificate-input"
+                      type="file"
+                      accept=".pfx,.p12"
+                      onChange={handleFiscalCertificateUpload}
+                      className="hidden"
+                    />
+                  </div>
                 </div>
               </div>
 

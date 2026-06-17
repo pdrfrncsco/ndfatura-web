@@ -122,6 +122,17 @@ export const FiscalConfigurationService = {
     const response = await apiClient.post<ApiEnvelope<ElectronicBillingConfiguration>>('/fiscal/electronic-billing/start/');
     return unwrap(response);
   },
+  uploadCertificate: async (file: File, password: string): Promise<ElectronicBillingConfiguration> => {
+    const formData = new FormData();
+    formData.append('certificate', file);
+    formData.append('password', password);
+    const response = await apiClient.post<ApiEnvelope<ElectronicBillingConfiguration>>(
+      '/fiscal/electronic-billing/certificate/',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return unwrap(response);
+  },
 };
 
 export const TenantService = {
