@@ -3,7 +3,8 @@
 import * as React from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
-import { TenantService } from '../../services/api';
+import { FiscalConfigurationService, TenantService } from '../../services/api';
+import { ElectronicBillingConfiguration, ElectronicBillingStatus } from '../../types/invoice';
 import { 
   Settings, 
   Building, 
@@ -18,7 +19,7 @@ import {
   DollarSign,
   Palette,
   Layout,
-  UserPlus
+  RefreshCw
 } from 'lucide-react';
 
 export default function SettingsModule() {
@@ -50,6 +51,32 @@ export default function SettingsModule() {
 
   // UI state
   const [uploadedLogo, setUploadedLogo] = React.useState<string | null>(currentTenant?.logoUrl || null);
+  const [fiscalConfig, setFiscalConfig] = React.useState<ElectronicBillingConfiguration | null>(null);
+  const [isLoadingFiscalConfig, setIsLoadingFiscalConfig] = React.useState(false);
+  const [isStartingActivation, setIsStartingActivation] = React.useState(false);
+
+  const loadFiscalConfig = React.useCallback(async () => {
+    if (!currentTenant) return;
+    setIsLoadingFiscalConfig(true);
+    try {
+      const status = await FiscalConfigurationService.getElectronicBillingStatus();
+      setFiscalConfig(status);
+    } catch {
+      addNotification({
+        title: 'Configuração AGT indisponível',
+        desc: 'Não foi possível carregar o estado da faturação eletrónica.',
+        type: 'warning',
+      });
+    } finally {
+      setIsLoadingFiscalConfig(false);
+    }
+  }, [currentTenant, addNotification]);
+
+  React.useEffect(() => {
+    if (activeTab === 'security') {
+      loadFiscalConfig();
+    }
+  }, [activeTab, loadFiscalConfig]);
 
   if (!currentTenant) return null;
 
@@ -128,6 +155,44 @@ export default function SettingsModule() {
     } catch (err) {
         alert('Falha ao rotacionar chaves.');
     }
+  };
+
+  const handleStartElectronicBilling = async () => {
+    setIsStartingActivation(true);
+    try {
+      const status = await FiscalConfigurationService.startElectronicBilling();
+      setFiscalConfig(status);
+      addNotification({
+        title: 'Processo iniciado',
+        desc: 'A ativação da faturação eletrónica foi registada.',
+        type: 'success',
+      });
+    } catch {
+      addNotification({
+        title: 'Ativação não iniciada',
+        desc: 'Verifique as permissões e os dados fiscais da empresa.',
+        type: 'warning',
+      });
+    } finally {
+      setIsStartingActivation(false);
+    }
+  };
+
+  const fiscalStatusLabel: Record<ElectronicBillingStatus, string> = {
+    NotStarted: 'Comunicação inativa',
+    ActivationStarted: 'Ativação iniciada',
+    CertificateMissing: 'Certificado pendente',
+    CertificateInvalid: 'Certificado inválido',
+    SeriesPending: 'Séries pendentes',
+    Active: 'Comunicação ativa',
+    Error: 'Erro de comunicação',
+  };
+
+  const fiscalStatusClass = (status?: ElectronicBillingStatus) => {
+    if (status === 'Active') return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+    if (status === 'Error' || status === 'CertificateInvalid') return 'bg-rose-500/10 text-rose-600 border-rose-500/20';
+    if (status === 'NotStarted') return 'bg-slate-500/10 text-slate-500 border-slate-500/20';
+    return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
   };
 
   return (
@@ -376,82 +441,131 @@ export default function SettingsModule() {
 
         {/* SECURITY TAB */}
         {activeTab === 'security' && (
-          <div className={`p-8 rounded-b-xl border border-t-0 space-y-10 ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
-             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                <div className="space-y-6">
-                    <div className="space-y-1">
-                        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                            <Award className="h-4 w-4 text-blue-500" /> Certificação do Software
-                        </h3>
-                        <p className="text-[11px] text-slate-500">Informações de homologação técnica junto à AGT.</p>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="p-5 rounded-2xl bg-blue-500/5 border border-blue-500/10 space-y-4">
-                            <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">N.º de Homologação AGT</span>
-                                <span className="px-2 py-0.5 bg-blue-600 text-white text-[9px] font-bold rounded">ACTIVO</span>
-                            </div>
-                            <p className="text-2xl font-mono font-black text-blue-600">{currentTenant.agtCertificateNo || '245/AGT/2026'}</p>
-                            <p className="text-[10px] text-slate-500 leading-relaxed">
-                                Este número de certificado é atribuído ao produtor do software e garante que o sistema cumpre todos os requisitos do Regime Jurídico das Facturas e Documentos Equivalentes.
-                            </p>
-                        </div>
-                        
-                        <div className="flex items-start gap-3 p-4 bg-amber-500/5 border border-amber-500/10 rounded-xl">
-                            <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
-                            <div className="space-y-1">
-                                <p className="text-xs font-bold text-amber-600 uppercase">Responsabilidade do Produtor</p>
-                                <p className="text-[10px] text-amber-600/80 leading-relaxed">
-                                    A manutenção do certificado digital e das chaves de homologação é de responsabilidade exclusiva da FACTURYAN (Produtor). Os utilizadores finais não precisam de realizar uploads de ficheiros .pfx ou .p12.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
+          <div className={`p-8 rounded-b-xl border border-t-0 space-y-6 ${theme === 'dark' ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+            <div className="flex flex-col gap-3 rounded-lg border border-rose-500/20 bg-rose-500/10 p-4 text-rose-700 dark:text-rose-300">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold">Antes de avançar para a configuração da Fatura Eletrónica, confirme a ativação no portal da AGT e a disponibilidade das credenciais fiscais.</p>
+                  <ul className="list-disc space-y-1 pl-5 text-xs">
+                    <li>Faça a ativação da Fatura Eletrónica no portal da AGT.</li>
+                    <li>Tenha o certificado e as chaves fiscais válidas para comunicação.</li>
+                    <li>Sem esta configuração, a comunicação eletrónica não substitui as obrigações fiscais existentes.</li>
+                  </ul>
                 </div>
+              </div>
+            </div>
 
-                <div className="space-y-6">
-                    <div className="space-y-1">
-                        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                            <ShieldCheck className="h-4 w-4 text-emerald-500" /> Conformidade e Assinaturas
-                        </h3>
-                        <p className="text-[11px] text-slate-500">Estado da integridade fiscal dos documentos.</p>
-                    </div>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
+                  <ShieldCheck className="h-4 w-4 text-blue-500" />
+                  Faturação Eletrónica AGT
+                </h3>
+                <p className="mt-1 text-[11px] text-slate-500">Estado operacional da comunicação fiscal da empresa.</p>
+              </div>
+              <button
+                type="button"
+                onClick={loadFiscalConfig}
+                disabled={isLoadingFiscalConfig}
+                className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-500/5 disabled:opacity-50 dark:border-slate-800 dark:text-slate-300"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoadingFiscalConfig ? 'animate-spin' : ''}`} />
+                Atualizar
+              </button>
+            </div>
 
-                    <div className="space-y-4">
-                        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-4">
-                            <div className="p-2 bg-emerald-500 rounded-lg text-white">
-                                <CheckCircle className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <span className="font-bold text-emerald-600 block leading-none">Motor JWS RS256 Activo</span>
-                                <span className="text-[10px] text-emerald-500/80 mt-1 block">Todos os documentos são assinados digitalmente com chaves RSA de 2048-bit.</span>
-                            </div>
-                        </div>
-                        
-                        <div className="p-5 bg-slate-900 rounded-2xl space-y-3">
-                            <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-slate-400 uppercase font-bold tracking-widest">Chave Pública de Validação</span>
-                                <span className="text-blue-400 font-bold cursor-pointer hover:text-blue-300" onClick={() => {
-                                    const blob = new Blob([currentTenant.softwarePublicKey || ''], { type: 'text/plain' });
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement('a');
-                                    a.href = url;
-                                    a.download = `public_key.pem`;
-                                    a.click();
-                                }}>Exportar .PEM</span>
-                            </div>
-                            <div className="font-mono text-slate-500 text-[9px] break-all leading-relaxed line-clamp-4 bg-black/20 p-3 rounded-lg border border-white/5">
-                                {currentTenant.softwarePublicKey || 'Chave gerada pelo sistema certificada pela AGT.'}
-                            </div>
-                        </div>
-
-                        <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 leading-relaxed">
-                            <p><strong>Hash Encadeado:</strong> O sistema utiliza algoritmos de hash SHA-256 para garantir que a sequência de facturação não pode ser alterada sem detecção, conforme as normas de inviolabilidade da AGT.</p>
-                        </div>
-                    </div>
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+              <div className={`min-h-[190px] rounded-lg border ${theme === 'dark' ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'} overflow-hidden`}>
+                <div className="border-b border-slate-200 bg-blue-500/10 px-5 py-4 text-center dark:border-slate-800">
+                  <h4 className="text-lg font-bold text-slate-800 dark:text-slate-100">1. Faturação Eletrónica</h4>
+                  <p className="mt-1 text-xs text-slate-500">Iniciar ativação.</p>
                 </div>
-             </div>
+                <div className="flex flex-col items-center gap-4 p-6 text-center">
+                  <p className="max-w-[320px] text-xs leading-6 text-slate-500">Inicie o processo para preparar a empresa para comunicação eletrónica com a AGT.</p>
+                  <button
+                    type="button"
+                    onClick={handleStartElectronicBilling}
+                    disabled={!fiscalConfig?.canStartActivation || isStartingActivation}
+                    className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    {isStartingActivation ? 'A iniciar...' : 'Iniciar Processo'}
+                  </button>
+                </div>
+              </div>
+
+              <div className={`min-h-[190px] rounded-lg border ${theme === 'dark' ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'} overflow-hidden ${!fiscalConfig?.canUploadCertificate && fiscalConfig?.status !== 'Active' ? 'opacity-60' : ''}`}>
+                <div className="border-b border-slate-200 bg-blue-500/10 px-5 py-4 text-center dark:border-slate-800">
+                  <h4 className="text-lg font-bold text-slate-800 dark:text-slate-100">2. Configurar Certificado</h4>
+                  <p className="mt-1 text-xs text-slate-500">Validação do certificado fiscal.</p>
+                </div>
+                <div className="space-y-4 p-6 text-center">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 text-white dark:bg-blue-600">
+                    <Upload className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1 text-xs text-slate-500">
+                    <p>Certificado: {fiscalConfig?.certificate.exists ? fiscalConfig.certificate.serialNumber || 'sem número' : 'não carregado'}</p>
+                    <p>Validade: {fiscalConfig?.certificate.expiresAt ? new Date(fiscalConfig.certificate.expiresAt).toLocaleDateString('pt-AO') : '-'}</p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex items-center gap-2 rounded-md bg-sky-500/60 px-5 py-3 text-sm font-bold text-white disabled:cursor-not-allowed"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Carregar Certificado
+                  </button>
+                </div>
+              </div>
+
+              <div className={`min-h-[190px] rounded-lg border ${theme === 'dark' ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'} overflow-hidden`}>
+                <div className="border-b border-slate-200 bg-blue-500/10 px-5 py-4 text-center dark:border-slate-800">
+                  <h4 className="text-lg font-bold text-slate-800 dark:text-slate-100">Estado da Configuração</h4>
+                  <p className="mt-1 text-xs text-slate-500">{fiscalConfig ? fiscalStatusLabel[fiscalConfig.status] : 'A carregar estado.'}</p>
+                </div>
+                <div className="space-y-4 p-6">
+                  <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${fiscalStatusClass(fiscalConfig?.status)}`}>
+                    {fiscalConfig ? fiscalStatusLabel[fiscalConfig.status] : 'A carregar'}
+                  </span>
+                  <div className="space-y-2 text-xs text-slate-500">
+                    <p>Séries ativas: {fiscalConfig?.series.filter((item) => item.isActive).length ?? 0}</p>
+                    <p>Último AGT: {fiscalConfig?.lastAgtSync?.responseCode || '-'}</p>
+                    <p>Emissão fiscal: {fiscalConfig?.canIssueInvoices ? 'permitida' : 'bloqueada'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {fiscalConfig?.warnings?.length ? (
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                {fiscalConfig.warnings.map((warning) => (
+                  <div key={warning} className="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{warning}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+              <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <Award className="h-4 w-4" />
+                Homologação do Software
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">N.º de Homologação AGT</div>
+                  <div className="mt-1 font-mono text-lg font-black text-blue-600">{currentTenant.agtCertificateNo || 'Por configurar'}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Chave pública</div>
+                  <div className="mt-1 break-all rounded-md bg-slate-900 p-3 font-mono text-[9px] leading-relaxed text-slate-400">
+                    {currentTenant.softwarePublicKey || 'Chave pública ainda não disponível.'}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -459,6 +573,3 @@ export default function SettingsModule() {
     </div>
   );
 }
-
-// Icon RefreshCw not imported, adding it
-import { RefreshCw } from 'lucide-react';

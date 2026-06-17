@@ -57,6 +57,59 @@ export interface ExchangeRate {
   date: string;
 }
 
+export type ElectronicBillingStatus =
+  | 'NotStarted'
+  | 'ActivationStarted'
+  | 'CertificateMissing'
+  | 'CertificateInvalid'
+  | 'SeriesPending'
+  | 'Active'
+  | 'Error';
+
+export interface FiscalCertificateStatus {
+  exists: boolean;
+  serialNumber: string;
+  issuedAt?: string | null;
+  expiresAt?: string | null;
+  isActive: boolean;
+  isExpired: boolean;
+  isValid: boolean;
+}
+
+export interface FiscalSeriesStatus {
+  id: string;
+  documentType: string;
+  code: string;
+  fiscalYear: number;
+  currentNumber: number;
+  isActive: boolean;
+  estabelecimentoId?: string | null;
+  estabelecimentoCode?: string | null;
+}
+
+export interface LastAgtSyncStatus {
+  id: string;
+  invoiceId: string;
+  invoiceNo: string;
+  status: string;
+  responseCode: string;
+  errorMessage: string;
+  requestId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ElectronicBillingConfiguration {
+  status: ElectronicBillingStatus;
+  canStartActivation: boolean;
+  canUploadCertificate: boolean;
+  canIssueInvoices: boolean;
+  certificate: FiscalCertificateStatus;
+  series: FiscalSeriesStatus[];
+  lastAgtSync?: LastAgtSyncStatus | null;
+  warnings: string[];
+}
+
 export interface Product {
   id: string;
   code: string;

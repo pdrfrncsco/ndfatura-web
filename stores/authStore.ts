@@ -2,13 +2,26 @@ import { create } from 'zustand';
 import { User, Tenant } from '../types/invoice';
 import { AuthService, TenantService, hasAccessToken, setActiveTenantHeaders } from '../services/api';
 
+export type AppScreen =
+  | 'dashboard'
+  | 'invoices'
+  | 'recurring'
+  | 'compras'
+  | 'payments'
+  | 'clients'
+  | 'products'
+  | 'reports'
+  | 'settings'
+  | 'users'
+  | 'audit_logs';
+
 interface AuthState {
   isAuthenticated: boolean;
   user: User | null;
   currentTenant: Tenant | null;
   tenants: Tenant[];
   theme: 'light' | 'dark';
-  currentScreen: 'dashboard' | 'invoices' | 'payments' | 'clients' | 'products' | 'reports' | 'settings' | 'users' | 'audit_logs';
+  currentScreen: AppScreen;
   sidebarCollapsed: boolean;
   mobileSidebarOpen: boolean;
   notifications: Array<{ id: string; title: string; desc: string; time: string; read: boolean; type: 'success' | 'warning' | 'info' }>;
@@ -21,7 +34,7 @@ interface AuthState {
   updateTenantProfile: (updated: Partial<Tenant>) => Promise<void>;
   toggleTheme: () => void;
   setTheme: (theme: 'light' | 'dark') => void;
-  setCurrentScreen: (screen: 'dashboard' | 'invoices' | 'payments' | 'clients' | 'products' | 'reports' | 'settings' | 'users' | 'audit_logs') => void;
+  setCurrentScreen: (screen: AppScreen) => void;
   toggleSidebar: () => void;
   toggleMobileSidebar: () => void;
   markNotificationsAsRead: () => void;

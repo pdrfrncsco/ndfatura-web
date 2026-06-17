@@ -2,8 +2,8 @@
 
 import * as React from 'react';
 import { useParams } from 'next/navigation';
-import { Invoice, Tenant } from '../../../types/invoice';
-import { InvoicePrintView } from '../../../components/invoices/InvoicePrintView';
+import { Invoice, Tenant } from '../../../../types/invoice';
+import { InvoicePrintView } from '../../../../components/invoices/InvoicePrintView';
 import { Download, Printer, ShieldCheck, Landmark } from 'lucide-react';
 
 export default function PublicInvoicePage() {

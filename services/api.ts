@@ -12,7 +12,9 @@ import {
   UserRole,
   StockMovement,
   Estabelecimento,
-  ExchangeRate
+  ExchangeRate,
+  ElectronicBillingConfiguration,
+  MulticaixaReference
 } from '../types/invoice';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -109,6 +111,17 @@ export const ExchangeRateService = {
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/taxas-cambio/${id}/`);
   }
+};
+
+export const FiscalConfigurationService = {
+  getElectronicBillingStatus: async (): Promise<ElectronicBillingConfiguration> => {
+    const response = await apiClient.get<ApiEnvelope<ElectronicBillingConfiguration>>('/fiscal/electronic-billing/status/');
+    return unwrap(response);
+  },
+  startElectronicBilling: async (): Promise<ElectronicBillingConfiguration> => {
+    const response = await apiClient.post<ApiEnvelope<ElectronicBillingConfiguration>>('/fiscal/electronic-billing/start/');
+    return unwrap(response);
+  },
 };
 
 export const TenantService = {
