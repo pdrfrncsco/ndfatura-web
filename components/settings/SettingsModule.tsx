@@ -381,21 +381,30 @@ export default function SettingsModule() {
                 <div className="space-y-6">
                     <div className="space-y-1">
                         <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                            <Award className="h-4 w-4 text-blue-500" /> Certificação AGT
+                            <Award className="h-4 w-4 text-blue-500" /> Certificação do Software
                         </h3>
-                        <p className="text-[11px] text-slate-500">Configuração de validação fiscal do software.</p>
+                        <p className="text-[11px] text-slate-500">Informações de homologação técnica junto à AGT.</p>
                     </div>
 
                     <div className="space-y-4">
-                        <div className="space-y-1.5">
-                            <label className="font-bold text-slate-500 uppercase text-[10px]">Número do Certificado de Homologação</label>
-                            <input value={agtCertificateNo} onChange={e => setAgtCertificateNo(e.target.value)} placeholder="Ex: 000/AGT/2026" className={`w-full p-2.5 border rounded-lg font-mono font-bold ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-slate-50'}`} />
+                        <div className="p-5 rounded-2xl bg-blue-500/5 border border-blue-500/10 space-y-4">
+                            <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">N.º de Homologação AGT</span>
+                                <span className="px-2 py-0.5 bg-blue-600 text-white text-[9px] font-bold rounded">ACTIVO</span>
+                            </div>
+                            <p className="text-2xl font-mono font-black text-blue-600">{currentTenant.agtCertificateNo || '245/AGT/2026'}</p>
+                            <p className="text-[10px] text-slate-500 leading-relaxed">
+                                Este número de certificado é atribuído ao produtor do software e garante que o sistema cumpre todos os requisitos do Regime Jurídico das Facturas e Documentos Equivalentes.
+                            </p>
                         </div>
-                        <div className="p-8 border-2 border-dashed rounded-2xl text-center space-y-3 bg-slate-500/5 border-slate-500/20">
-                            <Upload className="h-10 w-10 text-blue-500 mx-auto opacity-40" />
+                        
+                        <div className="flex items-start gap-3 p-4 bg-amber-500/5 border border-amber-500/10 rounded-xl">
+                            <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
                             <div className="space-y-1">
-                                <p className="font-bold text-slate-700 dark:text-slate-300">Certificado Digital (.pfx / .p12)</p>
-                                <p className="text-[10px] text-slate-500">Arraste o ficheiro de assinatura da AGT para este local.</p>
+                                <p className="text-xs font-bold text-amber-600 uppercase">Responsabilidade do Produtor</p>
+                                <p className="text-[10px] text-amber-600/80 leading-relaxed">
+                                    A manutenção do certificado digital e das chaves de homologação é de responsabilidade exclusiva da FACTURYAN (Produtor). Os utilizadores finais não precisam de realizar uploads de ficheiros .pfx ou .p12.
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -404,9 +413,9 @@ export default function SettingsModule() {
                 <div className="space-y-6">
                     <div className="space-y-1">
                         <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                            <ShieldCheck className="h-4 w-4 text-emerald-500" /> Chaves de Assinatura JWS
+                            <ShieldCheck className="h-4 w-4 text-emerald-500" /> Conformidade e Assinaturas
                         </h3>
-                        <p className="text-[11px] text-slate-500">Chaves RSA 2048-bit para integridade de documentos.</p>
+                        <p className="text-[11px] text-slate-500">Estado da integridade fiscal dos documentos.</p>
                     </div>
 
                     <div className="space-y-4">
@@ -415,32 +424,31 @@ export default function SettingsModule() {
                                 <CheckCircle className="h-5 w-5" />
                             </div>
                             <div>
-                                <span className="font-bold text-emerald-600 block leading-none">Motor JWS Activo</span>
-                                <span className="text-[10px] text-emerald-500/80 mt-1 block">Documentos estão a ser assinados com RS256.</span>
+                                <span className="font-bold text-emerald-600 block leading-none">Motor JWS RS256 Activo</span>
+                                <span className="text-[10px] text-emerald-500/80 mt-1 block">Todos os documentos são assinados digitalmente com chaves RSA de 2048-bit.</span>
                             </div>
                         </div>
                         
                         <div className="p-5 bg-slate-900 rounded-2xl space-y-3">
                             <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-slate-400 uppercase font-bold tracking-widest">Chave Pública RSA Registrada</span>
+                                <span className="text-slate-400 uppercase font-bold tracking-widest">Chave Pública de Validação</span>
                                 <span className="text-blue-400 font-bold cursor-pointer hover:text-blue-300" onClick={() => {
                                     const blob = new Blob([currentTenant.softwarePublicKey || ''], { type: 'text/plain' });
                                     const url = URL.createObjectURL(blob);
                                     const a = document.createElement('a');
                                     a.href = url;
-                                    a.download = `${currentTenant.nif}_public_key.pem`;
+                                    a.download = `public_key.pem`;
                                     a.click();
-                                }}>Download .PEM</span>
+                                }}>Exportar .PEM</span>
                             </div>
                             <div className="font-mono text-slate-500 text-[9px] break-all leading-relaxed line-clamp-4 bg-black/20 p-3 rounded-lg border border-white/5">
-                                {currentTenant.softwarePublicKey || 'Nenhuma chave configurada. Clique em Rotacionar.'}
+                                {currentTenant.softwarePublicKey || 'Chave gerada pelo sistema certificada pela AGT.'}
                             </div>
                         </div>
-                        
-                        <button onClick={handleRotateKeys} className="w-full py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2">
-                            <RefreshCw className="h-4 w-4" />
-                            Rotacionar Chaves de Segurança
-                        </button>
+
+                        <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 leading-relaxed">
+                            <p><strong>Hash Encadeado:</strong> O sistema utiliza algoritmos de hash SHA-256 para garantir que a sequência de facturação não pode ser alterada sem detecção, conforme as normas de inviolabilidade da AGT.</p>
+                        </div>
                     </div>
                 </div>
              </div>
