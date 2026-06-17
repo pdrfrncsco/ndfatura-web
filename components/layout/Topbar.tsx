@@ -18,6 +18,7 @@ import {
   Menu
 } from 'lucide-react';
 import { GlobalSearch } from './GlobalSearch';
+import { TourTrigger } from './InteractiveTour';
 
 export default function Topbar() {
   const { 
@@ -141,6 +142,9 @@ export default function Topbar() {
       <div className="flex items-center gap-3">
         {/* Global Search Component */}
         <GlobalSearch />
+
+        {/* Tour Trigger */}
+        <TourTrigger />
 
         {/* Theme Toggle */}
         <button

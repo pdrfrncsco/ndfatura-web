@@ -329,6 +329,23 @@ export const ReceiptService = {
   },
 };
 
+export const PurchasesService = {
+  getAll: async (): Promise<any[]> => {
+    const response = await apiClient.get<ApiEnvelope<any[]>>('/compras/');
+    return unwrap(response);
+  },
+  analyzeAI: async (formData: FormData): Promise<any> => {
+    const response = await apiClient.post<ApiEnvelope<any>>('/compras/analisar-ai/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return unwrap(response);
+  },
+  confirm: async (id: string): Promise<any> => {
+    const response = await apiClient.post<ApiEnvelope<any>>(`/compras/${id}/confirmar/`);
+    return unwrap(response);
+  },
+};
+
 export const RecurringInvoiceService = {
   getAll: async (): Promise<any[]> => {
     const response = await apiClient.get<ApiEnvelope<any[]>>('/recorrentes/');

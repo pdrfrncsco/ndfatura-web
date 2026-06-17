@@ -10,6 +10,7 @@ import Topbar from '../components/layout/Topbar';
 import DashboardView from '../components/dashboard/DashboardView';
 import InvoiceModule from '../components/invoices/InvoiceModule';
 import RecurringInvoiceModule from '../components/recurring/RecurringInvoiceModule';
+import PurchasesModule from '../components/purchases/PurchasesModule';
 import { PaymentsModule } from '../components/payments/PaymentsModule';
 import ClientsModule from '../components/clients/ClientsModule';
 import ProductsModule from '../components/products/ProductsModule';
@@ -18,6 +19,7 @@ import UsersModule from '../components/users/UsersModule';
 import AuditLogsView from '../components/audit/AuditLogsView';
 import SettingsModule from '../components/settings/SettingsModule';
 import { OnboardingWizard } from '../components/onboarding/OnboardingWizard';
+import { InteractiveTour } from '../components/layout/InteractiveTour';
 import { hasAccessToken } from '../services/api';
 
 function ApplicationShell() {
@@ -76,6 +78,7 @@ function ApplicationShell() {
     <div className={`min-h-screen flex ${theme === 'dark' ? 'dark bg-slate-950 text-slate-100' : 'bg-[#F8FAFC] text-slate-900'} transition-all font-sans relative overflow-hidden`}>
       
       {showOnboarding && <OnboardingWizard onComplete={() => setShowOnboarding(false)} />}
+      <InteractiveTour />
 
       {/* Sidebar collapsible left drawer (Fixed on mobile, Relative on desktop) */}
       <Sidebar />
@@ -100,6 +103,7 @@ function ApplicationShell() {
           {currentScreen === 'dashboard' && <DashboardView />}
           {currentScreen === 'invoices' && <InvoiceModule />}
           {currentScreen === 'recurring' && <RecurringInvoiceModule />}
+          {currentScreen === 'compras' && <PurchasesModule />}
           {currentScreen === 'payments' && <PaymentsModule />}
           {currentScreen === 'clients' && <ClientsModule />}
           {currentScreen === 'products' && <ProductsModule />}
